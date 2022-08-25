@@ -1,0 +1,100 @@
+{
+	"name": "REDCap REST",
+	"namespace": "MCRI\\REDCapREST",
+	"description": "Send API calls when saving particular instruments when a trigger condition is met.",
+    "authors": [
+        {
+            "name": "Luke Stevens",
+            "email": "luke.stevens@mcri.edu.au",
+            "institution": "Murdoch Children's Research Institute"
+        }
+    ],
+    "framework-version": 8,
+    "compatibility": {
+        "redcap-version-min": "11.1.1"
+    },
+	"permissions": [ "redcap_save_record" ],
+    "no-auth-pages": [ "example" ],
+    "no-csrf-pages": [ "example" ],
+    "project-settings": [
+        {
+            "key": "message-config",
+            "name": "Message Configuration",
+            "required": false,
+            "type": "sub_settings",
+            "repeatable": true,
+            "sub_settings": [
+                {
+                    "key": "message-enabled",
+                    "name": "Enabled?",
+                    "type": "checkbox"
+                },
+                {
+                    "name": "Trigger form(s)<br>Evaluate trigger logic on save of this form",
+                    "key": "trigger-form",
+                    "repeatable": true,
+                    "type": "form-list"
+                },
+				{
+					"name": "Trigger condition (REDCap logic syntax)<br>(Optional - leave empty to always copy.)",
+					"key": "trigger-logic",
+					"required": false,
+					"type": "text"
+				},
+				{
+					"name": "Destination URL<div class=\"text-muted\">Piping supported<br>Try POST https://redcap.yourplace.org/api/?type=module&prefix=redcap_rest&page=example&NOAUTH with payload {\"result\":\"RESULT\"}</div>",
+					"key": "dest-url",
+					"required": true,
+					"type": "text"
+				},
+                {
+                    "key": "http-method",
+                    "name": "HTTP Method",
+                    "required": true,
+                    "type": "dropdown",
+                    "choices": [
+                        { "value": "POST", "name": "POST" },
+                        { "value": "GET", "name": "GET" },
+                        { "value": "PUT", "name": "PUT" },
+                        { "value": "PATCH", "name": "PATCH" },
+                        { "value": "DELETE", "name": "DELETE" }
+                    ]
+                },
+                {
+					"name": "Payload form (e.g. as JSON)<br><span class=\"text-muted\">Piping supported</span>",
+					"key": "payload",
+					"required": false,
+					"type": "textarea"
+				},
+                {
+                    "name": "<div class=\"blue text-center\">cURL Settings (Optional)</div>",
+                    "key": "header-curl",
+                    "type": "descriptive"
+                },
+				{
+					"name": "Content type<br><span class=\"text-muted\">Default is 'application/json'</span>",
+					"key": "content-type",
+					"required": false,
+					"type": "text"
+				},
+                {
+                    "name": "cURL Options<br><span class=\"text-muted\">From https://www.php.net/manual/en/function.curl-setopt.php<br>One per line, e.g.</span><pre class=\"\">CURLOPT_CONNECTTIMEOUT=30<br>CURLOPT_SSL_VERIFYPEER=0</pre>",
+                    "key": "curl-options",
+                    "required": false,
+					"type": "textarea"
+				},
+                {
+                    "name": "<div class=\"blue text-center\">Capture a Return Value? (Optional)</div>",
+                    "key": "header-result",
+                    "type": "descriptive"
+                },
+                {
+                    "name": "Field to store return value<br><span class=\"text-muted\">Field must be present in the triggering event_id</span>",
+                    "key": "result-field",
+                    "required": false,
+                    "type": "field-list"
+                }
+            ]
+		}
+    ]
+}
