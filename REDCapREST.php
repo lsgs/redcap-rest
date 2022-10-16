@@ -101,18 +101,28 @@ class REDCapREST extends AbstractExternalModule {
      * @param string $string
      * @return string
      */
-    protected function pipe($string) {
-        $pipedString = \Piping::replaceVariablesInLabel(
-            $string, // $label='', 
-            $this->record, // $record=null, 
-            $this->event_id, // $event_id=null, 
-            $this->instance, // $instance=1, 
-            array(), // $record_data=array(),
-            true, // $replaceWithUnderlineIfMissing=true, 
-            null, // $project_id=null, 
-            false // $wrapValueInSpan=true
-        );
-
+    protected function pipe($string, $contentType='application/json') {
+        if ($contentType=='application/x-www-form-urlencoded') {
+            // need to urlencode piped strings for x-www-form-urlencoded
+            $encodedString = '';
+            $kvpairs = \explode('&', $string);
+            foreach ($kvpairs as $kvpair) {
+                list($k, $v) = \explode('=', $kvpair, 2);
+                $encodedString .= "&$k=".\urlencode($this->pipe($v));
+            }
+            $pipedString = substr($encodedString, 1);
+        } else {
+            $pipedString = \Piping::replaceVariablesInLabel(
+                $string, // $label='', 
+                $this->record, // $record=null, 
+                $this->event_id, // $event_id=null, 
+                $this->instance, // $instance=1, 
+                array(), // $record_data=array(),
+                true, // $replaceWithUnderlineIfMissing=true, 
+                null, // $project_id=null, 
+                false // $wrapValueInSpan=true
+            );
+        }
         // replace any missing values with "" or null for valid json
         $pipedString = str_replace('"______"','""',$pipedString); // empty string value
         $pipedString = str_replace('______','null',$pipedString); // empty non-string value
@@ -126,7 +136,7 @@ class REDCapREST extends AbstractExternalModule {
      */
     protected function formatPayload($rawPayload='', $contentType='application/json') {
         if ($rawPayload==='') return $rawPayload;
-        $payload = $this->pipe($rawPayload);
+        $payload = $this->pipe($rawPayload, $contentType);
         if ($contentType == 'application/json') {
             try {
                $jsonDecodeJsonPayload = \json_decode($payload, false, 512, JSON_THROW_ON_ERROR);

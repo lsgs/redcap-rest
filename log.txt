@@ -1,0 +1,40 @@
+*   Trying ::1:443...
+* Connected to localhost (::1) port 443 (#0)
+* ALPN, offering h2
+* ALPN, offering http/1.1
+* successfully set certificate verify locations:
+*  CAfile: C:\xampp\apache\bin\curl-ca-bundle.crt
+*  CApath: none
+* SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384
+* ALPN, server accepted to use http/1.1
+* Server certificate:
+*  subject: CN=localhost
+*  start date: Nov 10 23:48:47 2009 GMT
+*  expire date: Nov  8 23:48:47 2019 GMT
+*  common name: localhost (matched)
+*  issuer: CN=localhost
+*  SSL certificate verify result: self signed certificate (18), continuing anyway.
+> POST /redcapdev/api/?type=module&prefix=redcap_rest&page=example&NOAUTH HTTP/1.1
+Host: localhost
+Accept: */*
+Content-Type: application/json
+Content-Length: 20
+
+* old SSL session ID is stale, removing
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 200 OK
+< Date: Tue, 16 Aug 2022 23:29:47 GMT
+< Server: Apache/2.4.52 (Win64) OpenSSL/1.1.1m PHP/8.1.1
+< Expires: 0
+< cache-control: no-store, no-cache, must-revalidate
+< Pragma: no-cache
+< X-XSS-Protection: 1; mode=block
+< X-Content-Type-Options: nosniff
+< Access-Control-Allow-Origin: *
+< strict-transport-security: max-age=31536000
+< REDCap-Random-Text: NHDP4zpBbdGFQFUd89WYPAkZEfa55CYNis7QtjtuqiE5iCB
+< Set-Cookie: redcap_external_module_csrf_token=ababab8e74d1d78b26074c9ca3d3ec79388fa65551a9a71a8367eec424f83f18702c23c32315f983; path=/; secure; HttpOnly; SameSite=Lax
+< Content-Length: 0
+< Content-Type: text/html; charset=UTF-8
+< 
+* Connection #0 to host localhost left intact
