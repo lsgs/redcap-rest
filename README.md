@@ -2,11 +2,12 @@
 
 ## Description
 
-An external module enabling REDCap to send (and potentially in future receive) API calls.
+An external module enabling REDCap to send outbound API calls when saving data entry or survey forms and specified conditions are met. This can facilitate copying of data from your REDCap project to another application via its API, or to another REDCap project in either the same or a different instance of REDCap.
 
 ## Limitations
 
-* Initial implementation is of outbound calls only.
+* It is **strongly recommended** that this module be set to require module-specific privileges because user API tokens may be required to be entered into configuration settings.
+* Initial implementation is of outbound API calls only.
 
 ## Configuration
 
@@ -29,7 +30,7 @@ https://consentmgt.ourplace.org/api/record/[record_id]
 
 **Payload**
 * *Optional*: Textarea for specifying the form of the payload in JSON format. Piping supported.
-```
+```json
 {
   "consent": [consent],
   "consent_date": "[consentdt]"
@@ -38,3 +39,37 @@ https://consentmgt.ourplace.org/api/record/[record_id]
 
 **cURL Options**
 * *Optional* *Repeatable*: Key-value pairs for cURL settings. Piping supported.
+
+** Capture of Return Data**
+API response data can be captured into fields within the same event as the triggering form.
+
+** Result Field**
+* *Optional* Select a field (e.g. a Notes-type field) in which to store the entire response (useful for debugging or for extracting values from complex reposnses using JavaScript).
+
+** Map JSON Response Data to Fields**
+* *Optional* *Repeating* For JSON reponses, enter a property value to find in the response and a corresponding field name into which the property's value will be stored.
+
+## Examples
+### REDCap API
+Call a REDCap API endpoint to obtain the value of field `[fieldtogetvaluefor]` for the record id piped in from field `[recordtofind]`:
+* Destination URL: `https://redcap.someplace.edu/api/`
+* HTTP Method: `POST`
+* Payload form: `token=FEDCBA98765432100123456789ABCDEF&content=record&type=flat&format=json&records=[recordtofind]&fields[]=record_id&fields[]=fieldtogetvaluefor`
+* Content Type: `application/x-www-form-urlencoded` (note *not* `application/json`)
+
+### Australia/New Zealand Clinical Trial Registry (https://anzctr.org.au/)
+Obtain published details of a clinical trial identified using its ANZCTR ID (piped into paylod using `[anzctrid]`): 
+* Destination URL: `https://www.anzctr.org.au/WebServices/AnzctrWebservices.asmx`
+* HTTP Method: `POST`
+* Payload form: 
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
+  <soap12:Body>
+    <AnzctrTrialDetails xmlns="http://anzctr.org.au/WebServices/AnzctrWebServices">
+      <ids>[anzctrid]</ids>
+    </AnzctrTrialDetails>
+  </soap12:Body>
+</soap12:Envelope>
+```
+* Content Type: `application/soap+xml; charset=utf-8`

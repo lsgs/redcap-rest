@@ -1,7 +1,7 @@
 {
 	"name": "REDCap REST",
 	"namespace": "MCRI\\REDCapREST",
-	"description": "Send API calls when saving particular instruments when a trigger condition is met.",
+	"description": "Trigger API calls when saving data entry or survey forms when a trigger condition is met.<br>View documentation for some example configurations e.g. accessing a REDCap API endpoint.",
     "authors": [
         {
             "name": "Luke Stevens",
@@ -9,11 +9,10 @@
             "institution": "Murdoch Children's Research Institute"
         }
     ],
-    "framework-version": 8,
+    "framework-version": 12,
     "compatibility": {
-        "redcap-version-min": "11.1.1"
+        "php-version-min": "7.3"
     },
-	"permissions": [ "redcap_save_record" ],
     "no-auth-pages": [ "example" ],
     "no-csrf-pages": [ "example" ],
     "project-settings": [
@@ -89,11 +88,31 @@
                     "type": "descriptive"
                 },
                 {
-                    "name": "Field to store return value<br><span class=\"text-muted\">Field must be present in the triggering event_id</span>",
+                    "name": "Field to store entire response<br><span class=\"text-muted\">Field must be present in the triggering event</span>",
                     "key": "result-field",
                     "required": false,
                     "type": "field-list"
-                }
+                },
+                {
+                    "name": "Map data from a <em>JSON</em> response to project fields<br><span class=\"text-muted\">Fields must be present in the triggering event</span>",
+                    "key": "map-to-field",
+                    "type": "sub_settings",
+                    "repeatable": true,
+                    "sub_settings": [
+                        {
+                            "name": "Name of proprty/key in response data",
+                            "key": "prop-ref",
+                            "required": false,
+                            "type": "text"
+                        },
+                        {
+                            "name": "Save value to field",
+                            "key": "dest-field",
+                            "required": false,
+                            "type": "field-list"
+                        }
+                    ]
+				}
             ]
 		}
     ]
