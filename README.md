@@ -40,13 +40,14 @@ https://consentmgt.ourplace.org/api/record/[record_id]
 **cURL Options**
 * *Optional* *Repeatable*: Key-value pairs for cURL settings. Piping supported.
 
-** Capture of Return Data**
+**Capture of Return Data**
+
 API response data can be captured into fields within the same event as the triggering form.
 
-** Result Field**
+**Result Field**
 * *Optional* Select a field (e.g. a Notes-type field) in which to store the entire response (useful for debugging or for extracting values from complex reposnses using JavaScript).
 
-** Map JSON Response Data to Fields**
+**Map JSON Response Data to Fields**
 * *Optional* *Repeating* For JSON reponses, enter a property value to find in the response and a corresponding field name into which the property's value will be stored.
 
 ## Examples
