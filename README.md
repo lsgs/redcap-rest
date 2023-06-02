@@ -8,6 +8,7 @@ An external module enabling REDCap to send outbound API calls when saving data e
 
 * It is **strongly recommended** that this module be set to require module-specific privileges because user API tokens may be required to be entered into configuration settings.
 * Initial implementation is of outbound API calls only.
+* Initial implementation does not facilitate authentication mecahnisms like OAuth2.
 
 ## Configuration
 
