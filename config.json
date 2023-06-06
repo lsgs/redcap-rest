@@ -77,6 +77,12 @@
 					"type": "text"
 				},
                 {
+                    "name": "Additional Headers<br><span class=\"text-muted\">Each line will be added to an array of items passed along with Content-Type and Content-Length to CURLOPT_HTTPHEADER, e.g.</span><pre class=\"\">Authorization: Basic ABCDEF0123456789</pre>",
+                    "key": "curl-headers",
+                    "required": false,
+					"type": "textarea"
+				},
+                {
                     "name": "cURL Options<br><span class=\"text-muted\">From https://www.php.net/manual/en/function.curl-setopt.php<br>One per line, e.g.</span><pre class=\"\">CURLOPT_CONNECTTIMEOUT=30<br>CURLOPT_SSL_VERIFYPEER=0</pre>",
                     "key": "curl-options",
                     "required": false,
@@ -100,7 +106,7 @@
                     "repeatable": true,
                     "sub_settings": [
                         {
-                            "name": "Name of proprty/key in response data",
+                            "name": "Name of property/key in response data",
                             "key": "prop-ref",
                             "required": false,
                             "type": "text"

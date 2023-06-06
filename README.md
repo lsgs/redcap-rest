@@ -38,8 +38,14 @@ https://consentmgt.ourplace.org/api/record/[record_id]
 }
 ```
 
+**Content Type**
+* *Optional* Option to specify an alternative to 'application/json'.
+
+**Additional Headers**
+* *Optional* Additional headers along with Content-Type and Content-Length. Piping supported.
+
 **cURL Options**
-* *Optional* *Repeatable*: Key-value pairs for cURL settings. Piping supported.
+* *Optional* Key-value pairs for cURL settings, one pair per line in the notes box. Piping supported.
 
 **Capture of Return Data**
 
@@ -75,3 +81,14 @@ Obtain published details of a clinical trial identified using its ANZCTR ID (pip
 </soap12:Envelope>
 ```
 * Content Type: `application/soap+xml; charset=utf-8`
+
+### Basic Authentication
+Send a payload to an API endpoint secured with Basic Auth, uncluding an encoded token as an HTTP header:
+* Destination URL: `https://deep.thought.org/endpoint/`
+* HTTP Method: `POST`
+* Payload form: 
+```json
+{ "answer":42 }
+```
+* Content Type: ``
+* Additional headers: `Authorization: Basic SWYgdGhhdCdzIHRoZSBhbnN3ZXIsIHdoYXQgaXMgdGhlIHF1ZXN0aW9uPw==`

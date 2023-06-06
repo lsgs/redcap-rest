@@ -34,6 +34,7 @@ class REDCapREST extends AbstractExternalModule {
             $destURL = $this->pipe($instruction['dest-url']);
             $method = $instruction['http-method'];
             $contentType = $this->makeContentType($instruction['content-type']);
+            $curlHeaders = $this->makeCurlHeadersArray($instruction['curl-headers']);
             $curlOptions = $this->makeCurlOptionsArray($instruction['curl-options']);
             $resultField = $instruction['result-field'];
 
@@ -65,6 +66,10 @@ class REDCapREST extends AbstractExternalModule {
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             if ($GLOBALS['is_development_server']) curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
+            foreach ($curlOptions as $opt) {
+                curl_setopt($ch, $opt[0], $opt[1]);
+            }
+
             switch ($method) {
                 case 'POST':
 					curl_setopt($ch, CURLOPT_POST, 1);
@@ -79,15 +84,10 @@ class REDCapREST extends AbstractExternalModule {
                 default: // GET
                     break;
             }
-            
-            // If not sending as x-www-form-urlencoded, then set special header
-            if ($contentType != 'application/x-www-form-urlencoded') {
-                curl_setopt($ch, CURLOPT_HTTPHEADER, array("Content-Type: $contentType", "Content-Length: ".strlen($payload)));
-            }
 
-            foreach ($curlOptions as $opt) {
-                curl_setopt($ch, $opt[0], $opt[1]);
-            }
+            $curlHeaders[] = "Content-Type: $contentType";
+            $curlHeaders[] = "Content-Length: ".strlen($payload);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
 
             // Make the call
             $response = curl_exec($ch);
@@ -208,6 +208,16 @@ class REDCapREST extends AbstractExternalModule {
         return $instructionContentType;
     }
     
+    protected function makeCurlHeadersArray($instructionCurlHeaders='') {
+        if (empty(trim($instructionCurlHeaders))) return array();
+        $headers = array();
+        $lines = explode('\n', $instructionCurlHeaders);
+        foreach ($lines as $line) {
+            $headers[] = $this->pipe($line);
+        }
+        return $headers;
+    }
+    
     protected function makeCurlOptionsArray($instructionCurlOptions='') {
         if (empty(trim($instructionCurlOptions))) return array();
 
@@ -216,7 +226,7 @@ class REDCapREST extends AbstractExternalModule {
         foreach ($optionLines as $line) {
             list($opt, $val) = explode('=', $line, 2);
             $optIntVal = $this->findCurlOptInt($opt);
-            if ($optIntVal) $optionsArray[] = [$optIntVal, $val];
+            if ($optIntVal) $optionsArray[] = [$optIntVal, $this->pipe($val)];
         }
         return $optionsArray;
     }
@@ -252,7 +262,7 @@ class REDCapREST extends AbstractExternalModule {
         } else {
             $data = $_POST;
         }
-        \REDCap::logEvent(self::MODULE_TITLE." external module", "Test request:\n".$this->escape(print_r($data, true)));
+        \REDCap::logEvent(self::MODULE_TITLE." external module", "Test request:\n".print_r($this->escape($data), true));
         $result = '';
         if (is_array($data)) {
             $result = (array_key_exists('result', $data)) ? $data['result'] : '';
