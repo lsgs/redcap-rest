@@ -258,7 +258,7 @@ class REDCapREST extends AbstractExternalModule {
     public function example() {
         if (empty($_POST)) {
             $content = file_get_contents("php://input");
-            $data = \json_decode($content); // not sure why $_POST is empty!
+            $data = \json_decode($content, true); // not sure why $_POST is empty!
         } else {
             $data = $_POST;
         }
