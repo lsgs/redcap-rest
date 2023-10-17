@@ -9,12 +9,70 @@
             "institution": "Murdoch Children's Research Institute"
         }
     ],
-    "framework-version": 12,
-    "compatibility": {
-        "php-version-min": "7.3"
-    },
+    "framework-version": 14,
     "no-auth-pages": [ "example" ],
     "no-csrf-pages": [ "example" ],
+    "system-settings": [
+        {
+            "key": "token-management",
+            "name": "API Token Management<p class=\"text-muted\">Record API tokens here so they do not need to appear in plain text in project module settings and logging.</p>",
+            "required": false,
+            "type": "sub_settings",
+            "repeatable": true,
+            "sub_settings": [
+                {
+                    "key": "token-ref",
+                    "name": "Arbitrary unique reference/key<p class=\"text-muted\">Reference in project module settings in piping-style form as <code>[token-ref:xyz]</code> where <code>xyz</code> matches this reference.</p>",
+                    "type": "text",
+                    "required": true
+                },
+                {
+                    "key": "token-url",
+                    "name": "Destination URL (pipe token only in requests to this URL)<p class=\"text-muted\">Help prevent exposure of token by directing request to arbitrary URL.</p>",
+                    "type": "text",
+                    "required": true
+                },
+                {
+                    "key": "token-lookup-option",
+                    "name": "Token lookup option",
+                    "required": true,
+                    "type": "dropdown",
+                    "choices": [
+                        { "value": "lookup", "name": "Read token for project/username" },
+                        { "value": "specify", "name": "Use token as specified" }
+                    ]
+                },
+                {
+                    "key": "token-lookup-option-lookup",
+                    "name": "Settings for option \"Read token for project/username\"",
+                    "type": "descriptive"
+                },
+                {
+                    "key": "token-project",
+                    "name": "<span class=\"ml-4\">API token project id</span>",
+                    "type": "project-id",
+                    "required": false
+                },
+                {
+                    "key": "token-username",
+                    "name": "<span class=\"ml-4\">API token username</span>",
+                    "type": "text",
+                    "required": false
+                },
+                {
+                    "key": "token-lookup-option-specify",
+                    "name": "Settings for option \"Use token as specified\"",
+                    "type": "descriptive"
+                },
+				{
+                    "key": "token-specified",
+                    "name": "<span class=\"ml-4\">Specify token value (for external API calls)</span>",
+                    "type": "text",
+                    "required": false
+				}
+            ]
+        }
+    ],
     "project-settings": [
         {
             "key": "message-config",
@@ -60,7 +118,7 @@
                     ]
                 },
                 {
-					"name": "Payload form (e.g. as JSON)<br><span class=\"text-muted\">Piping supported</span>",
+					"name": "Payload form (e.g. as JSON)<br><span class=\"text-muted\">Piping supported</span><br><span style=\"color:red;\">Note: do not hard-code API tokens here.</span><br><span class=\"\">Instead, use <code>token=[token-ref:yourref]</code> and have your administrator configure <code>yourref</code> at system level.</span>",
 					"key": "payload",
 					"required": false,
 					"type": "textarea"
@@ -77,7 +135,7 @@
 					"type": "text"
 				},
                 {
-                    "name": "Additional Headers<br><span class=\"text-muted\">Each line will be added to an array of items passed along with Content-Type and Content-Length to CURLOPT_HTTPHEADER, e.g.</span><pre class=\"\">Authorization: Basic ABCDEF0123456789</pre>",
+                    "name": "Additional Headers<br><span class=\"text-muted\">Each line will be added to an array of items passed along with Content-Type and Content-Length to CURLOPT_HTTPHEADER, e.g.</span><pre class=\"\">Authorization: Basic ABCDEF0123456789</pre><br><span style=\"color:red;\">Note: do not hard-code authorization tokens here.</span><br><span class=\"\">Instead, use <code>[token-ref:yourauthref]</code> and have your administrator configure <code>yourauthref</code> at system level.</span>",
                     "key": "curl-headers",
                     "required": false,
 					"type": "textarea"
@@ -89,13 +147,19 @@
 					"type": "textarea"
 				},
                 {
-                    "name": "<div class=\"blue text-center\">Capture a Return Value? (Optional)</div>",
+                    "name": "<div class=\"blue text-center\">Capture Return Values? (Optional)</div>",
                     "key": "header-result",
                     "type": "descriptive"
                 },
                 {
                     "name": "Field to store entire response<br><span class=\"text-muted\">Field must be present in the triggering event</span>",
                     "key": "result-field",
+                    "required": false,
+                    "type": "field-list"
+                },
+                {
+                    "name": "Field to store response HTTP code<br><span class=\"text-muted\">Field must be present in the triggering event</span>",
+                    "key": "result-http-code",
                     "required": false,
                     "type": "field-list"
                 },

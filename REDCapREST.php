@@ -6,6 +6,7 @@
  */
 namespace MCRI\REDCapREST;
 
+use CSSInjector\ExternalModule\ExternalModule;
 use ExternalModules\AbstractExternalModule;
 
 class REDCapREST extends AbstractExternalModule {
@@ -14,6 +15,9 @@ class REDCapREST extends AbstractExternalModule {
     protected $event_id;
     protected $instrument;
     protected $instance;
+    protected $destURL;
+    protected $token;
+    protected $tokenRef;
     protected $curlOpts;
     
 	function redcap_save_record($project_id, $record=null, $instrument, $event_id, $group_id=null, $survey_hash=null, $response_id=null, $repeat_instance=1) {
@@ -31,12 +35,15 @@ class REDCapREST extends AbstractExternalModule {
             $this->instrument = $instrument;
             $this->instance = $repeat_instance;
 
-            $destURL = $this->pipe($instruction['dest-url']);
+            $this->destURL = $this->pipe($instruction['dest-url']);
+            $this->token = '';
+            $this->tokenRef = '';
             $method = $instruction['http-method'];
             $contentType = $this->makeContentType($instruction['content-type']);
             $curlHeaders = $this->makeCurlHeadersArray($instruction['curl-headers']);
             $curlOptions = $this->makeCurlOptionsArray($instruction['curl-options']);
             $resultField = $instruction['result-field'];
+            $resultCodeField = $instruction['result-http-code'];
 
             $resultMap = $instruction['map-to-field'];
             foreach ($resultMap as $i => $pair) {
@@ -53,16 +60,17 @@ class REDCapREST extends AbstractExternalModule {
 
             try {
                 $payload = $this->formatPayload($instruction['payload'], $contentType);
+                $payloadForLog = (empty($this->token)) ? $payload : str_replace($this->token, '|||Token '.$this->tokenRef.' removed|||', $payload);
             } catch (\JsonException $je) {
-                \REDCap::logEvent($title, 'Error parsing payload JSON string: '.$je->getMessage().PHP_EOL.$payload, '', $this->record, $this->event_id);
+                \REDCap::logEvent($title, 'Error parsing payload JSON string: '.$je->getMessage().PHP_EOL.$payloadForLog, '', $this->record, $this->event_id);
                 return;
             } catch (\Throwable $th) {
-                \REDCap::logEvent($title, $th->getMessage().PHP_EOL.$payload, '', $this->record, $this->event_id);
+                \REDCap::logEvent($title, $th->getMessage().PHP_EOL.$payloadForLog, '', $this->record, $this->event_id);
                 return;
             }
         
             $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $destURL);
+            curl_setopt($ch, CURLOPT_URL, $this->destURL);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             if ($GLOBALS['is_development_server']) curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
@@ -94,9 +102,10 @@ class REDCapREST extends AbstractExternalModule {
             $info = curl_getinfo($ch);
             curl_close ($ch);
 
-            \REDCap::logEvent($title, "Sent $method to $destURL:\n".$payload."\nResponse: ".$info['http_code']."\n".$response, '', $this->record, $this->event_id);
+            $this->log('cURL info: '.json_encode($info)); // log response info useful for debugging responses
+            \REDCap::logEvent($title, "Sent $method to {$this->destURL}:\n".$payloadForLog."\nResponse: ".$info['http_code']."\n".$response, '', $this->record, $this->event_id);
             
-            if ($info['http_code'] >= 200 && $info['http_code'] <= 299 && (!empty($resultField) || count($resultMap)>0)) {
+            if (!empty($resultField) || !empty($resultCodeField) || count($resultMap)>0) {
                 global $Proj;
                 $saveArray = array();
                 $saveArray[$Proj->table_pk] = $this->record;
@@ -110,6 +119,9 @@ class REDCapREST extends AbstractExternalModule {
                 }
                 if (!empty($resultField)) {
                     $saveArray[$resultField] = $response;
+                }
+                if (!empty($resultCodeField)) {
+                    $saveArray[$resultCodeField] = $info['http_code'];
                 }
                 if (!empty($resultMap)) {
                     $responseArray = \json_decode($response, true);
@@ -136,6 +148,9 @@ class REDCapREST extends AbstractExternalModule {
      * @return string
      */
     protected function pipe($string, $contentType='') {
+
+        $string = $this->pipeApiToken($string);
+
         if ($contentType=='application/x-www-form-urlencoded') {
             // need to urlencode piped strings for x-www-form-urlencoded
             $encodedString = '';
@@ -179,6 +194,44 @@ class REDCapREST extends AbstractExternalModule {
             );
         }
         return $pipedString;
+    }
+
+    /**
+     * pipeApiToken
+     * Substiute reference to api token in form [token-ref:xyz] with real token according to system-level module settings
+     * (Helps avoid user api tokens being visible in project module settings)
+     * @param string
+     * @return string 
+     */
+    protected function pipeApiToken($string) {
+        $found = false;
+        $matches = array();
+        $pattern = "/\[token-ref:([-\w]+)\]/";
+        if (!preg_match($pattern, $string, $matches)) return $string;
+
+        $systemTokens = $this->getSubSettings('token-management');
+        foreach ($systemTokens as $i => $systemToken) {
+            if (  array_key_exists(1, $matches) && $matches[1]==$systemToken['token-ref'] &&
+                  $this->destURL===$systemToken['token-url'] ) {
+                $found = true;
+                break;
+            }
+        }
+
+        if (!$found) throw new \Exception('Token with reference "'.$matches[1].'" and destination URL "'.$this->destURL.'" not found in system-level token management.');
+        
+        if ($systemToken['token-lookup-option']==='lookup') {
+            $sql = "select api_token from redcap_user_rights where project_id=? and username=? limit 1";
+            $q = $this->query($sql, [$systemToken['token-project'], $systemToken['token-username']]);
+            $r = db_fetch_assoc($q);
+            $this->token = $r["api_token"];
+        } else if ($systemToken['token-lookup-option']==='specify') {
+            $this->token = $this->escape($systemToken['token-specified']);
+        }
+
+        if (empty($this->token)) throw new \Exception('Could not read token with reference "'.$matches[1].'" in system-level token management.');
+        $this->tokenRef = $matches[1];
+        return str_replace($matches[0], $this->token, $string);
     }
 
     /**
