@@ -76,7 +76,7 @@
     "project-settings": [
         {
             "key": "message-config",
-            "name": "Message Configuration",
+            "name": "<span class=\"fs-6 badge bg-primary\">Message Configuration</span>",
             "required": false,
             "type": "sub_settings",
             "repeatable": true,

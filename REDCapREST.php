@@ -46,6 +46,7 @@ class REDCapREST extends AbstractExternalModule {
             $resultCodeField = $instruction['result-http-code'];
 
             $resultMap = $instruction['map-to-field'];
+            $resultMap = (is_array($resultMap)) ? $resultMap : array();
             foreach ($resultMap as $i => $pair) {
                 // remove any incomplete field mappings
                 if (array_key_exists('prop-ref', $pair) && empty($pair['prop-ref'])) {
