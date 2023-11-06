@@ -110,7 +110,9 @@ class REDCapREST extends AbstractExternalModule {
                 global $Proj;
                 $saveArray = array();
                 $saveArray[$Proj->table_pk] = $this->record;
-                if (\REDCap::isLongitudinal()) $saveValue['redcap_event_name'] = \REDCap::getEventNames(true, false, $this->event_id);
+                if (\REDCap::isLongitudinal()) {
+                    $saveArray['redcap_event_name'] = \REDCap::getEventNames(true, false, $this->event_id);
+                }
                 if ($Proj->isRepeatingEvent($event_id)) {
                     $saveArray['redcap_repeat_instrument'] = '';
                     $saveArray['redcap_repeat_instance'] = $this->instance;
