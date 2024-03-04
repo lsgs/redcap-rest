@@ -11,6 +11,7 @@ use ExternalModules\AbstractExternalModule;
 
 class REDCapREST extends AbstractExternalModule {
     const MODULE_TITLE = "REDCap REST";
+    protected $Proj;
     protected $record;
     protected $event_id;
     protected $instrument;
@@ -22,6 +23,7 @@ class REDCapREST extends AbstractExternalModule {
     
 	function redcap_save_record($project_id, $record=null, $instrument, $event_id, $group_id=null, $survey_hash=null, $response_id=null, $repeat_instance=1) {
         global $Proj;
+        $this->Proj = $Proj;
         $title = self::MODULE_TITLE." external module";
 		$settings = $this->getSubSettings('message-config');
 
@@ -53,7 +55,7 @@ class REDCapREST extends AbstractExternalModule {
                     unset($resultMap[$i]);
                 } else if (array_key_exists('dest-field', $pair) && empty($pair['dest-field'])) {
                     unset($resultMap[$i]);
-                } else if (array_key_exists('dest-field', $pair) && !array_key_exists($pair['dest-field'], $Proj->metadata)) {
+                } else if (array_key_exists('dest-field', $pair) && !array_key_exists($pair['dest-field'], $this->Proj->metadata)) {
                     unset($resultMap[$i]);
                 }
             }
@@ -107,38 +109,29 @@ class REDCapREST extends AbstractExternalModule {
             \REDCap::logEvent($title, "Sent $method to {$this->destURL}:\n".$payloadForLog."\nResponse: ".$info['http_code']."\n".$response, '', $this->record, $this->event_id);
             
             if (!empty($resultField) || !empty($resultCodeField) || count($resultMap)>0) {
-                global $Proj;
                 $saveArray = array();
-                $saveArray[$Proj->table_pk] = $this->record;
-                if (\REDCap::isLongitudinal()) {
-                    $saveArray['redcap_event_name'] = \REDCap::getEventNames(true, false, $this->event_id);
-                }
-                if ($Proj->isRepeatingEvent($event_id)) {
-                    $saveArray['redcap_repeat_instrument'] = '';
-                    $saveArray['redcap_repeat_instance'] = $this->instance;
-                } else if ($Proj->isRepeatingForm($event_id, $instrument)) {
-                    $saveArray['redcap_repeat_instrument'] = $this->instrument;
-                    $saveArray['redcap_repeat_instance'] = $this->instance;
-                }
                 if (!empty($resultField)) {
-                    $saveArray[$resultField] = $response;
+                    $saveArray[] = $this->makeSaveArrayElement($resultField, $response);
                 }
                 if (!empty($resultCodeField)) {
-                    $saveArray[$resultCodeField] = $info['http_code'];
+                    $saveArray[] = $this->makeSaveArrayElement($resultCodeField, $info['http_code']);
                 }
                 if (!empty($resultMap)) {
                     $responseArray = \json_decode($response, true);
                     if (!empty($responseArray)) {
                         foreach ($resultMap as $i => $pair) {
-                            $saveArray[$pair['dest-field']] = $this->extractResultFromResponse($responseArray, $pair['prop-ref']);
+                            $responseValue = $this->extractResultFromResponse($responseArray, $pair['prop-ref']);
+                            if ($responseValue!==null) $saveArray[] = $this->makeSaveArrayElement($pair['dest-field'], $responseValue);
                         }
                     }
                 } 
 
-                $saveResult = \REDCap::saveData('json-array', [$saveArray], 'overwrite'); // json_encode() not required for 'json-array' format
+                $saveResult = \REDCap::saveData('json-array', $saveArray, 'overwrite'); // json_encode() not required for 'json-array' format
 
-                if (!empty($saveResult['errors']) ) {
-                    \REDCap::logEvent($title, "Save to field $resultField failed \n".print_r($saveResult['errors'], true)."\nData:\n".print_r($saveArray, true), '', $record, $event_id);
+                if (empty($saveResult['errors']) ) {
+//                    \REDCap::logEvent($title, "Results saved \n".print_r($saveResult, true)."\nData:\n".print_r($saveArray, true), '', $record, $event_id);
+                } else {
+                    \REDCap::logEvent($title, "Results save failed \n".print_r($saveResult, true)."\nData:\n".print_r($saveArray, true), '', $record, $event_id);
                 }
             }
         }        
@@ -288,22 +281,50 @@ class REDCapREST extends AbstractExternalModule {
     }
 
     /**
-     * extractResultFromResponse($response, $ref)
+     * makeSaveArrayElement($response, $ref)
      * Search response for an element with key matching $ref
      * Return the (first) corresponding value
-     * @param array $repsonseArray
+     * @param string $field
+     * @param string $value
+     * @return string
+     */
+    protected function makeSaveArrayElement($field, $value) {
+        $elem = array();
+        $elem[$this->Proj->table_pk] = $this->record;
+        if (\REDCap::isLongitudinal()) {
+            $elem['redcap_event_name'] = \REDCap::getEventNames(true, false, $this->event_id);
+        }
+        if ($this->Proj->isRepeatingEvent($this->event_id)) {
+            $elem['redcap_repeat_instrument'] = '';
+            $elem['redcap_repeat_instance'] = $this->instance;
+
+        } else if ($this->Proj->isRepeatingForm($this->event_id, $this->Proj->metadata[$field]['form_name'])) { // note this is the form of the field we're saving to, not the triggering form
+            $elem['redcap_repeat_instrument'] = $this->Proj->metadata[$field]['form_name'];
+            $elem['redcap_repeat_instance'] = $this->instance;
+        }
+        $elem[$field] = $value;
+        return $elem;
+    }
+
+    /**
+     * extractResultFromResponse($array, $ref)
+     * Search multidimensional for an element with key matching $ref
+     * Return the (last) value with the specified key
+     * @param array $array
      * @param string $ref
      * @return string
      */
     protected function extractResultFromResponse($responseArray, $ref) {
-        if (count($responseArray)===0) return '';
-        if (empty($ref)) return '';
-        if (array_key_exists($ref, $responseArray)) return (string)$responseArray[$ref];
-        foreach ($responseArray as $key => $value) {
-            if ($key==$ref) return $value;
-            if (is_array($value)) return $this->extractResultFromResponse($value, $ref);
+        $ref = (string)$ref;
+        $result= array($ref => null);
+        if (is_array($responseArray)) {
+            array_walk_recursive($responseArray, 
+                function ($item, $key) use (&$result) {
+                    if (array_key_exists($key, $result)) $result[$key] = (string)$item;
+                }
+            );
         }
-        return '';
+        return $result[$ref];
     }
 
     /**

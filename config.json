@@ -10,6 +10,9 @@
         }
     ],
     "framework-version": 14,
+    "compatibility": {
+       "php-version-min": "7.3.0"
+    },
     "no-auth-pages": [ "example" ],
     "no-csrf-pages": [ "example" ],
     "system-settings": [
