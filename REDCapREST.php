@@ -20,11 +20,12 @@ class REDCapREST extends AbstractExternalModule {
     protected $token;
     protected $tokenRef;
     protected $curlOpts;
+    protected $title;
     
 	function redcap_save_record($project_id, $record=null, $instrument, $event_id, $group_id=null, $survey_hash=null, $response_id=null, $repeat_instance=1) {
         global $Proj;
         $this->Proj = $Proj;
-        $title = self::MODULE_TITLE." external module";
+        $this->title = self::MODULE_TITLE." external module";
 		$settings = $this->getSubSettings('message-config');
 
         foreach($settings as $i => $instruction) {
@@ -65,10 +66,10 @@ class REDCapREST extends AbstractExternalModule {
                 $payload = $this->formatPayload($instruction['payload'], $contentType);
                 $payloadForLog = (empty($this->token)) ? $payload : str_replace($this->token, '|||Token '.$this->tokenRef.' removed|||', $payload);
             } catch (\JsonException $je) {
-                \REDCap::logEvent($title, 'Error parsing payload JSON string: '.$je->getMessage().PHP_EOL.$payloadForLog, '', $this->record, $this->event_id);
+                \REDCap::logEvent($this->title, 'Error parsing payload JSON string: '.$je->getMessage().PHP_EOL.$payloadForLog, '', $this->record, $this->event_id);
                 return;
             } catch (\Throwable $th) {
-                \REDCap::logEvent($title, $th->getMessage().PHP_EOL.$payloadForLog, '', $this->record, $this->event_id);
+                \REDCap::logEvent($this->title, $th->getMessage().PHP_EOL.$payloadForLog, '', $this->record, $this->event_id);
                 return;
             }
         
@@ -106,33 +107,24 @@ class REDCapREST extends AbstractExternalModule {
             curl_close ($ch);
 
             $this->log('cURL info: '.json_encode($info)); // log response info useful for debugging responses
-            \REDCap::logEvent($title, "Sent $method to {$this->destURL}:\n".$payloadForLog."\nResponse: ".$info['http_code']."\n".$response, '', $this->record, $this->event_id);
+            \REDCap::logEvent($this->title, "Sent $method to {$this->destURL}:\n".$payloadForLog."\nResponse: ".$info['http_code']."\n".$response, '', $this->record, $this->event_id);
             
             if (!empty($resultField) || !empty($resultCodeField) || count($resultMap)>0) {
-                $saveArray = array();
                 if (!empty($resultField)) {
-                    $saveArray[] = $this->makeSaveArrayElement($resultField, $response);
+                    $this->saveValueToField($resultField, $response);
                 }
                 if (!empty($resultCodeField)) {
-                    $saveArray[] = $this->makeSaveArrayElement($resultCodeField, $info['http_code']);
+                    $this->saveValueToField($resultCodeField, $info['http_code']);
                 }
                 if (!empty($resultMap)) {
                     $responseArray = \json_decode($response, true);
                     if (!empty($responseArray)) {
                         foreach ($resultMap as $i => $pair) {
                             $responseValue = $this->extractResultFromResponse($responseArray, $pair['prop-ref']);
-                            if ($responseValue!==null) $saveArray[] = $this->makeSaveArrayElement($pair['dest-field'], $responseValue);
+                            if ($responseValue!==null) $this->saveValueToField($pair['dest-field'], $responseValue);
                         }
                     }
                 } 
-
-                $saveResult = \REDCap::saveData('json-array', $saveArray, 'overwrite'); // json_encode() not required for 'json-array' format
-
-                if (empty($saveResult['errors']) ) {
-//                    \REDCap::logEvent($title, "Results saved \n".print_r($saveResult, true)."\nData:\n".print_r($saveArray, true), '', $record, $event_id);
-                } else {
-                    \REDCap::logEvent($title, "Results save failed \n".print_r($saveResult, true)."\nData:\n".print_r($saveArray, true), '', $record, $event_id);
-                }
             }
         }        
 	}
@@ -325,6 +317,16 @@ class REDCapREST extends AbstractExternalModule {
             );
         }
         return $result[$ref];
+    }
+
+    protected function saveValueToField($field, $value) {
+        $saveArray = array($this->makeSaveArrayElement($field, $value));
+        $saveResult = \REDCap::saveData('json-array', $saveArray, 'overwrite'); // json_encode() not required for 'json-array' format
+        if (empty($saveResult['errors']) ) {
+//            \REDCap::logEvent($this->title, "Results saved \n".print_r($saveResult, true)."\nData:\n".print_r($saveArray, true), '', $this->record, $this->event_id);
+        } else {
+            \REDCap::logEvent($this->title, "Results save failed \n".print_r($saveResult, true)."\nData:\n".print_r($saveArray, true), '', $this->record, $this->event_id);
+        }
     }
 
     /**
