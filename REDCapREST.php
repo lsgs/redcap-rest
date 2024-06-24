@@ -137,7 +137,11 @@ class REDCapREST extends AbstractExternalModule {
      */
     protected function pipe($string, $contentType='') {
 
-        $string = $this->pipeApiToken($string);
+        try {
+            $string = $this->pipeApiToken($string);
+        } catch (\Throwable $th) {
+            \REDCap::logEvent(self::MODULE_TITLE." external module", 'Error retrieving system token for API call: '.$th->getMessage(), '', $this->record, $this->event_id);
+        }
 
         if ($contentType=='application/x-www-form-urlencoded') {
             // need to urlencode piped strings for x-www-form-urlencoded
@@ -200,13 +204,13 @@ class REDCapREST extends AbstractExternalModule {
         $systemTokens = $this->getSubSettings('token-management');
         foreach ($systemTokens as $i => $systemToken) {
             if (  array_key_exists(1, $matches) && $matches[1]==$systemToken['token-ref'] &&
-                  $this->destURL===$systemToken['token-url'] ) {
+                  starts_with($this->destURL, $systemToken['token-url']) ) {
                 $found = true;
                 break;
             }
         }
 
-        if (!$found) throw new \Exception('Token with reference "'.$matches[1].'" and destination URL "'.$this->destURL.'" not found in system-level token management.');
+        if (!$found) throw new \Exception('Token with reference "'.$matches[1].'" for destination URL "'.$this->destURL.'" not found in system-level token management.');
         
         if ($systemToken['token-lookup-option']==='lookup') {
             $sql = "select api_token from redcap_user_rights where project_id=? and username=? limit 1";
