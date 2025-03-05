@@ -9,10 +9,7 @@
             "institution": "Murdoch Children's Research Institute"
         }
     ],
-    "framework-version": 14,
-    "compatibility": {
-       "php-version-min": "7.3.0"
-    },
+    "framework-version": 16,
     "no-auth-pages": [ "example" ],
     "no-csrf-pages": [ "example" ],
     "system-settings": [

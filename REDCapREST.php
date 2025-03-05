@@ -6,7 +6,6 @@
  */
 namespace MCRI\REDCapREST;
 
-use CSSInjector\ExternalModule\ExternalModule;
 use ExternalModules\AbstractExternalModule;
 
 class REDCapREST extends AbstractExternalModule {
