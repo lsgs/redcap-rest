@@ -215,7 +215,7 @@ class REDCapREST extends AbstractExternalModule {
             $sql = "select api_token from redcap_user_rights where project_id=? and username=? limit 1";
             $q = $this->query($sql, [$systemToken['token-project'], $systemToken['token-username']]);
             $r = db_fetch_assoc($q);
-            $this->token = $r["api_token"];
+            $this->token = $this->escape($r["api_token"]);
         } else if ($systemToken['token-lookup-option']==='specify') {
             $this->token = $this->escape($systemToken['token-specified']);
         }
