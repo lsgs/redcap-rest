@@ -35,11 +35,12 @@ https://consentmgt.ourplace.org/api/record/[record_id]
 ```
 
 **Payload**
-* *Optional*: Textarea for specifying the form of the payload in JSON format. Piping supported, including of references to system-level token configuration.
+* *Optional*: Textarea for specifying the form of the payload in JSON format. Piping supported, including of references to system-level token configuration. Wrap sections in `{{...}}` to skip piping replacement of variable names, e.g. when sending `filterLogic=` for a REDCap export records request.
 ```json
 {
   "consent": [consent],
-  "consent_date": "[consentdt]"
+  "consent_date": "[consentdt]",
+  "property_no_piping": "{{[consentdt]}}"
 }
 ```
 

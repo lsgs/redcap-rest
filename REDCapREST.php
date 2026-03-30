@@ -21,7 +21,7 @@ class REDCapREST extends AbstractExternalModule {
     protected $curlOpts;
     protected $title;
     
-	function redcap_save_record($project_id, $record=null, $instrument, $event_id, $group_id=null, $survey_hash=null, $response_id=null, $repeat_instance=1) {
+	function redcap_save_record($project_id, $record, $instrument, $event_id, $group_id, $survey_hash, $response_id, $repeat_instance=1) {
         global $Proj;
         $this->Proj = $Proj;
         $this->title = self::MODULE_TITLE." external module";
@@ -148,7 +148,11 @@ class REDCapREST extends AbstractExternalModule {
             $kvpairs = \explode('&', $string);
             foreach ($kvpairs as $kvpair) {
                 list($k, $v) = \explode('=', $kvpair, 2);
-                $encodedString .= "&$k=".\urlencode($this->pipe($v));
+
+                $v = \urlencode($this->pipe($v));
+                $v = str_replace('%7B%7B', '{{', str_replace('%7D%7D', '}}', $v)); // reverse encoding of %7B%7B0%7D%7D => {{0}} (placeholders)
+
+                $encodedString .= "&$k=$v";
             }
             $pipedString = substr($encodedString, 1);
 
@@ -160,7 +164,7 @@ class REDCapREST extends AbstractExternalModule {
                 $pipedString = preg_replace('/:\s*______/',':null',$pipedString); // empty non-string value e.g. { "b": ______ } -> { "b":null }
 
                 // difficult to guarantee valid json :
-                // - instruction payload config can be invalid if piping numberic data e.g. {"x":[someint]}
+                // - instruction payload config can be invalid if piping numeric data e.g. {"x":[someint]}
                 // and/or
                 // - string after piping can be invalid due to unescaped " characters
                 //   e.g. { "a": "text "containing" quotes" } -> { "a": "text \"containing\" quotes" }
@@ -232,7 +236,29 @@ class REDCapREST extends AbstractExternalModule {
      */
     protected function formatPayload($rawPayload='', $contentType='application/json') {
         if ($rawPayload==='') return $rawPayload;
-        $payload = $this->pipe($rawPayload, $contentType);
+
+        $payload = $rawPayload;
+
+        // find and replace sections to skip piping replacement and/or urlencoding e.g. filter logic expressions for REDCap record exports
+        $escapePiping = array();
+        $escape = preg_match_all('/({{[^}]+}})/', $payload, $escapePiping);
+        if ($escape && count($escapePiping) && count($escapePiping[0])) {
+            foreach($escapePiping[0] as $idx => $skip) {
+                $pos = strpos($payload, $skip);
+                $len = strlen($skip);
+                $payload = substr_replace($payload, '{{'.$idx.'}}', $pos, $len); // not str_replace() in case multiple of same match
+            }
+        }
+
+        $payload = $this->pipe($payload, $contentType);
+
+        // reinstate skipped content minus the {{ }} delimiters
+        if ($escape && count($escapePiping) && count($escapePiping[0])) {
+            foreach($escapePiping[0] as $idx => $skip) {
+                $payload = preg_replace("/\{\{$idx\}\}/", trim($skip, '{}'), $payload, 1); // not str_replace() in case multiple of same match
+            }
+        }
+
         return $payload;
     }
 
