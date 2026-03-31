@@ -207,7 +207,7 @@ class REDCapREST extends AbstractExternalModule {
         $systemTokens = $this->getSubSettings('token-management');
         foreach ($systemTokens as $i => $systemToken) {
             if (  array_key_exists(1, $matches) && $matches[1]==$systemToken['token-ref'] &&
-                  starts_with($this->destURL, $systemToken['token-url']) ) {
+                starts_with($this->destURL, $systemToken['token-url']) ) {
                 $found = true;
                 break;
             }
@@ -277,17 +277,51 @@ class REDCapREST extends AbstractExternalModule {
         if (empty(trim($instructionContentType))) $instructionContentType = 'application/json';
         return $instructionContentType;
     }
-    
-    protected function makeCurlHeadersArray($instructionCurlHeaders='') {
-        if (empty(trim($instructionCurlHeaders))) return array();
+
+    protected function makeCurlHeadersArray($instructionCurlHeaders = '')
+    {
+        // Build a sanitized header list from the EM config, skipping hop-by-hop/problematic headers.
+        if (empty(trim($instructionCurlHeaders)))
+            return array();
+
         $headers = array();
-        $lines = explode('\n', $instructionCurlHeaders);
+        $lines = explode("\n", $instructionCurlHeaders);
+
+        // Never forward these explicitly; cURL/Apache will handle them.
+        $blocked = array('content-length', 'connection', 'transfer-encoding', 'expect');
+
         foreach ($lines as $line) {
-            $headers[] = $this->pipe($line);
+            $line = trim($line);
+            if ($line === '')
+                continue;
+
+            // Piping (RedCap variables)
+            $line = $this->pipe($line);
+
+            // Normalize spaces and remove CR/LF
+            $line = str_replace(array("\r", "\n"), ' ', $line);
+            $line = preg_replace('/\s+/', ' ', $line);
+
+            // Split "Name: Value"
+            $parts = explode(':', $line, 2);
+            if (count($parts) !== 2)
+                continue;
+
+            $name = trim($parts[0]);
+            $value = trim($parts[1]);
+            if ($name === '')
+                continue;
+
+            if (in_array(strtolower($name), $blocked, true))
+                continue;
+
+            $headers[] = $name . ': ' . $value;
         }
+
         return $headers;
     }
-    
+
+
     protected function makeCurlOptionsArray($instructionCurlOptions='') {
         if (empty(trim($instructionCurlOptions))) return array();
 
