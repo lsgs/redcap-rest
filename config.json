@@ -1,7 +1,7 @@
 {
-	"name": "REDCap REST",
-	"namespace": "MCRI\\REDCapREST",
-	"description": "Trigger API calls when saving data entry or survey forms when a trigger condition is met.<br>View documentation for some example configurations e.g. accessing a REDCap API endpoint.",
+    "name": "REDCap REST",
+    "namespace": "MCRI\\REDCapREST",
+    "description": "Trigger API calls when saving data entry or survey forms when a trigger condition is met.<br>View documentation for some example configurations e.g. accessing a REDCap API endpoint.",
     "authors": [
         {
             "name": "Luke Stevens",
@@ -64,12 +64,12 @@
                     "name": "Settings for option \"Use token as specified\"",
                     "type": "descriptive"
                 },
-				{
+                {
                     "key": "token-specified",
                     "name": "<span class=\"ml-4\">Specify token value (for external API calls)</span>",
                     "type": "text",
                     "required": false
-				}
+                }
             ]
         }
     ],
@@ -82,6 +82,12 @@
             "repeatable": true,
             "sub_settings": [
                 {
+                    "key": "instruction-description",
+                    "name": "Name / Description (Optional)",
+                    "required": false,
+                    "type": "textarea"
+                },
+                {
                     "key": "message-enabled",
                     "name": "Enabled?",
                     "type": "checkbox"
@@ -92,18 +98,18 @@
                     "repeatable": true,
                     "type": "form-list"
                 },
-				{
-					"name": "Trigger condition (REDCap logic syntax)<br>(Optional - leave empty to always copy.)",
-					"key": "trigger-logic",
-					"required": false,
-					"type": "text"
-				},
-				{
-					"name": "Destination URL<div class=\"text-muted\">Piping supported<br>Try POST https://redcap.yourplace.org/api/?type=module&prefix=redcap_rest&page=example&NOAUTH with payload {\"result\":\"RESULT\"}</div>",
-					"key": "dest-url",
-					"required": true,
-					"type": "text"
-				},
+                {
+                    "name": "Trigger condition (REDCap logic syntax)<br>(Optional - leave empty to always copy.)",
+                    "key": "trigger-logic",
+                    "required": false,
+                    "type": "text"
+                },
+                {
+                    "name": "Destination URL<div class=\"text-muted\">Piping supported<br>Try POST https://redcap.yourplace.org/api/?type=module&prefix=redcap_rest&page=example&NOAUTH with payload {\"result\":\"RESULT\"}</div>",
+                    "key": "dest-url",
+                    "required": true,
+                    "type": "text"
+                },
                 {
                     "key": "http-method",
                     "name": "HTTP Method",
@@ -118,36 +124,63 @@
                     ]
                 },
                 {
-					"name": "Payload form (e.g. as JSON)<br><span class=\"text-muted\">Piping supported</span><br><span style=\"color:red;\">Note: do not hard-code API tokens here.</span><br><span class=\"\">Instead, use <code>token=[token-ref:yourref]</code> and have your administrator configure <code>yourref</code> at system level.</span>",
-					"key": "payload",
-					"required": false,
-					"type": "textarea"
-				},
+                    "name": "Payload form (e.g. as JSON)<br><span class=\"text-muted\">Piping supported</span><br><span style=\"color:red;\">Note: do not hard-code API tokens here.</span><br><span class=\"\">Instead, use <code>token=[token-ref:yourref]</code> and have your administrator configure <code>yourref</code> at system level.</span>",
+                    "key": "payload",
+                    "required": false,
+                    "type": "textarea"
+                },
                 {
-                    "name": "<div class=\"blue text-center\">cURL Settings (Optional)</div>",
+                    "name": "<div class=\"blue\">cURL Settings (Optional)</div>",
                     "key": "header-curl",
                     "type": "descriptive"
                 },
-				{
-					"name": "Content type<br><span class=\"text-muted\">Default is 'application/json'</span>",
-					"key": "content-type",
-					"required": false,
-					"type": "text"
-				},
+                {
+                    "name": "Content type<br><span class=\"text-muted\">Default is 'application/json'</span>",
+                    "key": "content-type",
+                    "required": false,
+                    "type": "text"
+                },
                 {
                     "name": "Additional Headers<br><span class=\"text-muted\">Each line will be added to an array of items passed along with Content-Type and Content-Length to CURLOPT_HTTPHEADER, e.g.</span><pre class=\"\">Authorization: Basic ABCDEF0123456789</pre><br><span style=\"color:red;\">Note: do not hard-code authorization tokens here.</span><br><span class=\"\">Instead, use <code>[token-ref:yourauthref]</code> and have your administrator configure <code>yourauthref</code> at system level.</span>",
                     "key": "curl-headers",
                     "required": false,
-					"type": "textarea"
-				},
+                    "type": "textarea"
+                },
                 {
                     "name": "cURL Options<br><span class=\"text-muted\">From https://www.php.net/manual/en/function.curl-setopt.php<br>One per line, e.g.</span><pre class=\"\">CURLOPT_CONNECTTIMEOUT=30<br>CURLOPT_SSL_VERIFYPEER=0</pre>",
                     "key": "curl-options",
                     "required": false,
-					"type": "textarea"
-				},
+                    "type": "textarea"
+                },
                 {
-                    "name": "<div class=\"blue text-center\">Capture Return Values? (Optional)</div>",
+                    "name": "<div class=\"blue\">OAuth2 Settings (if using OAuth2)<br>Note: <span class=\"text-danger\">do not hard-code sensitive credentials like client ID/secret or passwords here</span>.</span><br><span class=\"\">Instead, use <code>[token-ref:youroauth2idref]</code> etc. and have your administrator configure <code>youroauth2idref</code> etc. at system level using the \"Use token as specified\" option.</span></div>",
+                    "key": "header-oauth2",
+                    "type": "descriptive"
+                },
+                {
+                    "name": "OAuth2 type",
+                    "key": "oauth2-option",
+                    "required": false,
+                    "type": "dropdown",
+                    "chocies": [
+                        { "value": "client-credentials", "label": "Client Credentials"}
+                    ]
+                },
+                {
+                    "name": "OAuth2 configuration settings (JSON format)<br>Example:<pre>{<br>  \"auth-url\": \"https://example.com/auth\",<br>  \"client-id\": \"[token-ref:myclientid]\",<br>  \"client-secret\": \"[token-ref:mysecret]\",<br>  \"username\": \"user1\",<br>  \"password\": \"[token-ref:mypw]\"<br>}</pre>",
+                    "key": "oauth2-config",
+                    "required": false,
+                    "type": "textarea"
+                },
+                {
+                    "name": "OAuth2 storage cache",
+                    "key": "oauth2-cache",
+                    "required": false,
+                    "hidden": false,
+                    "type": "textarea"
+                },
+                {
+                    "name": "<div class=\"blue\">Capture Return Values? (Optional)</div>",
                     "key": "header-result",
                     "type": "descriptive"
                 },
@@ -182,8 +215,13 @@
                             "type": "field-list"
                         }
                     ]
-				}
+                },
+                {
+                    "name": "<div><br><br><br><br><br><br><br><br></div>",
+                    "key": "space-footer",
+                    "type": "descriptive"
+                }
             ]
-		}
+        }
     ]
 }

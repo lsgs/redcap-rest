@@ -8,6 +8,9 @@ namespace MCRI\REDCapREST;
 
 use ExternalModules\AbstractExternalModule;
 
+require_once 'OAuth2.php';
+require_once 'OAuth2ClientCredentials.php';
+
 class REDCapREST extends AbstractExternalModule {
     const MODULE_TITLE = "REDCap REST";
     protected $Proj;
@@ -71,41 +74,27 @@ class REDCapREST extends AbstractExternalModule {
                 \REDCap::logEvent($this->title, $th->getMessage().PHP_EOL.$payloadForLog, '', $this->record, $this->event_id);
                 return;
             }
-        
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $this->destURL);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            if ($GLOBALS['is_development_server']) curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
-            foreach ($curlOptions as $opt) {
-                curl_setopt($ch, $opt[0], $opt[1]);
-            }
-
-            switch ($method) {
-                case 'POST':
-					curl_setopt($ch, CURLOPT_POST, 1);
-					curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+            switch ($instruction['oauth2-config']) {
+                case 'client-credentials':
+                    // oauth2 connection required
+                    try {
+                        $oauth2 = new OAuth2ClientCredentials($this, $instruction, $i);
+                        $oauth2->oauth2Call($method, $this->destURL, $contentType, $curlHeaders, $curlOptions, $payload);
+                        $response = $oauth2->getResponse();
+                        $info = $oauth2->getInfo();
+                    } catch (\Throwable $th) {
+                        $response = $th->getMessage();
+                        $info = array('http_code'=>500);
+                    } 
                     break;
-                case 'PUT':
-                case 'PATCH':
-                case 'DELETE':
-                    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-                    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-                    break;
-                default: // GET
+                
+                default:
+                    // Make the call using simple curl
+                    list($response, $info) = $this->curlCall($method, $this->destURL, $contentType, $curlHeaders, $curlOptions, $payload);
                     break;
             }
 
-            $curlHeaders[] = "Content-Type: $contentType";
-            $curlHeaders[] = "Content-Length: ".strlen($payload);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
-
-            // Make the call
-            $response = curl_exec($ch);
-            $info = curl_getinfo($ch);
-            curl_close ($ch);
-
-            $this->log('cURL info: '.json_encode($info)); // log response info useful for debugging responses
             \REDCap::logEvent($this->title, "Sent $method to {$this->destURL}:\n".$payloadForLog."\nResponse: ".$info['http_code']."\n".$response, '', $this->record, $this->event_id);
             
             if (!empty($resultField) || !empty($resultCodeField) || count($resultMap)>0) {
@@ -198,7 +187,7 @@ class REDCapREST extends AbstractExternalModule {
      * @param string
      * @return string 
      */
-    protected function pipeApiToken($string) {
+    public function pipeApiToken($string) {
         $found = false;
         $matches = array();
         $pattern = "/\[token-ref:([-\w]+)\]/";
@@ -380,5 +369,46 @@ class REDCapREST extends AbstractExternalModule {
             $result = $data;
         }
         return \REDCap::filterHtml(htmlspecialchars_decode($result));
+    }
+
+    /**
+     * call()
+     * Send request using curl
+     */
+    public function curlCall(string $method, string $url, string $contentType, array $headers, array $curlOptions, string $payload) {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        if ($GLOBALS['is_development_server']) curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+
+        foreach ($curlOptions as $opt) {
+            curl_setopt($ch, $opt[0], $opt[1]);
+        }
+
+        switch ($method) {
+            case 'POST':
+                curl_setopt($ch, CURLOPT_POST, 1);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+                break;
+            case 'PUT':
+            case 'PATCH':
+            case 'DELETE':
+                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+                break;
+            default: // GET
+                break;
+        }
+
+        $headers[] = "Content-Type: $contentType";
+        $headers[] = "Content-Length: ".strlen($payload);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+        $response = curl_exec($ch);
+        $info = curl_getinfo($ch);
+
+        $this->log('cURL info: '.json_encode($info)); // log response info useful for debugging responses
+        
+        return array($response, $info);
     }
 }
