@@ -379,6 +379,7 @@ class REDCapREST extends AbstractExternalModule {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, self::MODULE_TITLE);
         if ($GLOBALS['is_development_server']) curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
         foreach ($curlOptions as $opt) {
