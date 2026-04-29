@@ -75,7 +75,7 @@ class REDCapREST extends AbstractExternalModule {
                 return;
             }
 
-            switch ($instruction['oauth2-config']) {
+            switch ($instruction['oauth2-option']) {
                 case 'client-credentials':
                     // oauth2 connection required
                     try {
@@ -406,6 +406,7 @@ class REDCapREST extends AbstractExternalModule {
 
         $response = curl_exec($ch);
         $info = curl_getinfo($ch);
+        curl_close($ch);
 
         $this->log('cURL info: '.json_encode($info)); // log response info useful for debugging responses
         
