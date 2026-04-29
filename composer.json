@@ -1,0 +1,19 @@
+{
+    "name": "mcri/redcap-rest",
+    "description": "REDCap External Module: Trigger API calls on form save",
+    "require-dev": {
+        "phpunit/phpunit": "^10.0"
+    },
+    "autoload": {
+        "classmap": [
+            "REDCapREST.php",
+            "OAuth2.php",
+            "OAuth2ClientCredentials.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "MCRI\\REDCapREST\\Tests\\": "tests/"
+        }
+    }
+}
