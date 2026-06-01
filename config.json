@@ -162,8 +162,8 @@
                     "key": "oauth2-option",
                     "required": false,
                     "type": "dropdown",
-                    "chocies": [
-                        { "value": "client-credentials", "label": "Client Credentials"}
+                    "choices": [
+                        { "value": "client-credentials", "name": "Client Credentials"}
                     ]
                 },
                 {
@@ -176,7 +176,7 @@
                     "name": "OAuth2 storage cache",
                     "key": "oauth2-cache",
                     "required": false,
-                    "hidden": false,
+                    "hidden": true,
                     "type": "textarea"
                 },
                 {

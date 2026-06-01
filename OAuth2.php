@@ -55,7 +55,7 @@ abstract class OAuth2 {
     protected function saveAccessToken() {
         $cache = json_decode($this->instruction['oauth2-cache'], true);
         $cache['access_token'] = $this->access_token;
-        $cache['access_token_expiry'] = $this->access_token_expiry->format('Y-m-i H:i:s');
+        $cache['access_token_expiry'] = $this->access_token_expiry->format('Y-m-d H:i:s');
 
         $projectSetting = $this->module->getProjectSetting("oauth2-cache");
         $projectSetting[$this->instruction_index] = json_encode($cache, JSON_FORCE_OBJECT);

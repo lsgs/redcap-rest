@@ -6,20 +6,27 @@
  */
 namespace MCRI\REDCapREST;
 
-abstract class OAuth2ClientCredentials extends OAuth2 {
+class OAuth2ClientCredentials extends OAuth2 {
 
-    public function oauth2Call(string $method, string $url, string $contentType, array $headers, array $curlOptions, string $payload, $allowRetry=false): void {
+    public function oauth2Call(string $method, string $url, string $contentType, array $headers, array $curlOptions, string $payload, $allowRetry=true): void {
         // update access token if needed (first connection or expired)
         $this->updateAccessToken();
 
-        $headers[] = "Authorization: Bearer ".$this->access_token;
+        $authHeaders = $headers;
+        $authHeaders[] = "Authorization: Bearer ".$this->access_token;
 
-        list($this->response, $this->info) = $this->module->curlCall($method, $url, $contentType, $headers, $curlOptions, $payload, true);
+        list($this->response, $this->info) = $this->module->curlCall($method, $url, $contentType, $authHeaders, $curlOptions, $payload);
         
         if ($this->info['http_code'] === 401 && $allowRetry) {
             // retry once with new token
             $this->access_token = null;
-            list($this->response, $this->info) = $this->module->curlCall($method, $url, $contentType, $headers, $curlOptions, $payload, false);
+            $this->access_token_expiry = null;
+            $this->updateAccessToken();
+
+            $authHeaders = $headers;
+            $authHeaders[] = "Authorization: Bearer ".$this->access_token;
+
+            list($this->response, $this->info) = $this->module->curlCall($method, $url, $contentType, $authHeaders, $curlOptions, $payload);
         }
     }
 
@@ -37,11 +44,11 @@ abstract class OAuth2ClientCredentials extends OAuth2 {
 
         // obtain an access token
         $payload = http_build_query(array('grant_type' => 'client_credentials'));
-        $curlOptions = array(CURLOPT_USERPWD, $this->client_id.":".$this->client_secret);
+        $curlOptions = array(array(CURLOPT_USERPWD, $this->client_id.":".$this->client_secret));
 
         list($response, $info) = $this->module->curlCall('POST', $this->token_endpoint, 'application/x-www-form-urlencoded', array(), $curlOptions, $payload);
 
-        if (!isset($info['http_code']) && $info['http_code'] !== 200) {
+        if (!isset($info['http_code']) || $info['http_code'] !== 200) {
             throw new \Exception('Unable to obtain access token');
         }
 

@@ -75,7 +75,7 @@ class REDCapREST extends AbstractExternalModule {
                 return;
             }
 
-            switch ($instruction['oauth2-config']) {
+            switch ($instruction['oauth2-option']) {
                 case 'client-credentials':
                     // oauth2 connection required
                     try {
@@ -379,6 +379,7 @@ class REDCapREST extends AbstractExternalModule {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, self::MODULE_TITLE);
         if ($GLOBALS['is_development_server']) curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
         foreach ($curlOptions as $opt) {
@@ -406,6 +407,7 @@ class REDCapREST extends AbstractExternalModule {
 
         $response = curl_exec($ch);
         $info = curl_getinfo($ch);
+        curl_close($ch);
 
         $this->log('cURL info: '.json_encode($info)); // log response info useful for debugging responses
         

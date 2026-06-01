@@ -1,2 +1,5 @@
 
 test.txt
+vendor/
+composer.lock
+.phpunit.cache/
