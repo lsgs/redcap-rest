@@ -1,6 +1,6 @@
 <?php
 /**
- * REDCap External Module: ERDCap REST
+ * REDCap External Module: REDCap REST
  * Send API calls when saving particular instruments when a trigger condition is met.
  * @author Luke Stevens, Murdoch Children's Research Institute
  */
