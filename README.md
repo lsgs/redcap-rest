@@ -10,10 +10,14 @@ An external module enabling REDCap to send outbound API calls when saving data e
 
 v1.4.0 introduces the facility for configuring sensitive configuration such as API or Autorization tokens at system level rather than hard-coding tokens into project module configuration. Use the placeholder `[token-ref:someref]` in place of your sensitive configuration value, and have your system administrator configure `someref` at system level. Tokens configured this way are also masked in logging.
 
+### Summary of Copy Instructions
+
+From v2.0.0 the module provides a summary page showing a table of the instruction settings along with buttons that facilitate export and import of the instructions in CSV format. The summary page can be accessed via a link in the module description and in the configuration settings dialog.
+
 ## Limitations
 
 * Initial implementation is of outbound API calls only.
-* Initial implementation does not facilitate authentication mecahnisms like OAuth2.
+* Initial implementation does not facilitate authentication mechanisms like OAuth2.
 
 ## Configuration in Projects
 
