@@ -10,6 +10,7 @@
         }
     ],
     "framework-version": 16,
+    "auth-ajax-actions": [ "import-instructions" ],
     "no-auth-pages": [ "example" ],
     "no-csrf-pages": [ "example" ],
     "system-settings": [
@@ -75,12 +76,28 @@
     ],
     "project-settings": [
         {
+            "key": "summary-page",
+            "name": "<div style=\"display:inline-block;width:392px;\">View summary of instructions:</div><div style=\"display:inline-block;width:200px;\"><a class=\"btn btn-sm btn-primaryrc\" style=\"color:#fff;\" target=\"_blank\" href=\"#\">Open<i class=\"fas fa-external-link-alt ml-1\"></i></a></div>",
+            "type": "descriptive"
+        },
+        {
+            "key": "section-header-1",
+            "name": "<div class=\"blue text-center\" style=\"position:relative;left:-8px;width:733px\">Instructions</div>",
+            "type": "descriptive"
+        },
+        {
             "key": "message-config",
             "name": "<span class=\"fs-6 badge bg-primary\">Message Configuration</span>",
             "required": false,
             "type": "sub_settings",
             "repeatable": true,
             "sub_settings": [
+                {
+                    "key": "instruction-description",
+                    "name": "Instruction Description (Optional)",
+                    "required": false,
+                    "type": "textarea"
+                },
                 {
                     "key": "message-enabled",
                     "name": "Enabled?",
