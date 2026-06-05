@@ -8,7 +8,7 @@ namespace MCRI\REDCapREST;
 
 abstract class OAuth2 {
     protected $response;
-    protected $info;
+    protected array $info;
     protected $module;
     protected $instruction;
     protected $instruction_index;

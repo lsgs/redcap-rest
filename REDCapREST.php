@@ -453,7 +453,10 @@ class REDCapREST extends AbstractExternalModule {
         $this->log('cURL info: '.json_encode($info)); // log response info useful for debugging responses
         
         return array($response, $info);
-     * redcap_module_configuration_settings
+    }
+
+    /*
+     * redcap_module_configuration_settings()
      * Triggered when the system or project configuration dialog is displayed for a given module.
      * Allows dynamically modify and return the settings that will be displayed - here include a link to the instruction summary page
      * @param string $project_id, $settings
@@ -598,7 +601,7 @@ class REDCapREST extends AbstractExternalModule {
                 }
             }),
             array('title'=>'Message Payload','tdclass'=>'text-center','getter'=>function(array $instruction){ 
-                $payload = (isset($instruction['payload'])) ? $instruction['payload'] : ''; // old configs may be missing instruction-description
+                $payload = (isset($instruction['payload'])) ? $instruction['payload'] : '';
                 if (is_null($payload) || trim($payload=='')) {
                     return '<i class="fa-solid fa-minus text-muted"></i>';
                 } else {
@@ -629,9 +632,9 @@ class REDCapREST extends AbstractExternalModule {
                     return '<i class="fa-solid fa-minus text-muted"></i>';
                 }
                 $outTxt = '';
-                $vals = explode('\n', $val);
+                $vals = explode("\n", $val);
                 foreach ($vals as $hdr) {
-                    $outTxt .= "<div class='badge bg-primary'>".\htmlspecialchars($val, ENT_QUOTES)."</div>";
+                    $outTxt .= "<div class='badge bg-primary'>".\htmlspecialchars($hdr, ENT_QUOTES)."</div>";
                 }
                 return $outTxt;
             }),
@@ -641,11 +644,38 @@ class REDCapREST extends AbstractExternalModule {
                     return '<i class="fa-solid fa-minus text-muted"></i>';
                 }
                 $outTxt = '';
-                $vals = explode('\n', $val);
-                foreach ($vals as $hdr) {
-                    $outTxt .= "<div class='badge bg-primary'>".\htmlspecialchars($val, ENT_QUOTES)."</div>";
+                $vals = explode("\n", $val);
+                foreach ($vals as $opt) {
+                    $outTxt .= "<div class='badge bg-primary'>".\htmlspecialchars($opt, ENT_QUOTES)."</div>";
                 }
                 return $outTxt;
+            }),
+            array('title'=>'OAuth2 Option','tdclass'=>'text-center','getter'=>function(array $instruction){ 
+                if (empty($instruction['oauth2-option'])) {
+                    return '<i class="fa-solid fa-minus text-muted"></i>';
+                } else {
+                    $val = $instruction['oauth2-option'];
+                    return '<span class="badge bg-secondary">'.$this->getLabelForConfigChoice('oauth2-option', $val).'</span>';
+                }
+            }),
+            array('title'=>'OAuth2 Configuration','tdclass'=>'text-center','getter'=>function(array $instruction){ 
+                $oauth2config = (isset($instruction['oauth2-config'])) ? $instruction['oauth2-config'] : ''; // old configs may be missing oauth2-config
+                if (is_null($oauth2config) || trim($oauth2config=='')) {
+                    return '<i class="fa-solid fa-minus text-muted"></i>';
+                } else {
+                    $oauth2config = $this->escape(trim($oauth2config));
+                    $oauth2configDisplay = '<span class="m-0 text-left module-two-line-text" style="font-size:75%; max-width: 20ch;">'.str_replace("\n",' ',$oauth2config).'</span>';
+
+                    $dialogText = '';
+                    $lines = explode("\n", $oauth2config);
+                    foreach ($lines as $l => $line) {
+                        $dialogText .= substr("  ".($l+1).". ", -5);
+                        $chunks = str_split(htmlspecialchars_decode($line), 100);
+                        $dialogText .= htmlspecialchars(implode('<br>   &rdsh; ', $chunks), ENT_QUOTES).'<br>';
+                    }
+
+                    return '<span class="module-hidden"><pre>'.rtrim($dialogText).'</pre></span><button class="module-btn-show btn btn-xs btn-outline-secondary" title="View full payload">'.$oauth2configDisplay.'</button>';
+                }
             }),
             array('title'=>'Save Response To','tdclass'=>'text-center','getter'=>function(array $instruction){ 
                 $val = \htmlspecialchars($instruction['result-field'], ENT_QUOTES);
@@ -760,7 +790,7 @@ class REDCapREST extends AbstractExternalModule {
         <div id="module-import-info" class="module-hidden">
             <p class="mt-0">Instructions may be exported and imported. Use the CSV delimiter character from your REDCap profile when importing.</p>
             <p>Select the timestamp of the settings version to export. The first entry (default) is the latest version; the current settings.</p>
-            <p>Import files require the following <strong>fourteen columns</strong> to be present (although you may alter the title text). Values are required for some columns and option for others, as indicated:</p>
+            <p>Import files require the following <strong>sixteen columns</strong> to be present (although you may alter the title text). Values are required for some columns and option for others, as indicated:</p>
             <ol>
                 <li><strong>Description (optional)</strong></li>
                 <li><strong>Enabled</strong> (required): Integer from the following list:
@@ -777,6 +807,8 @@ class REDCapREST extends AbstractExternalModule {
                 <li><strong>Content type</strong> (optional): Content type for request, e.g. application/json (default), application/x-www-form-urlencoded.</li>
                 <li><strong>Additional headers</strong> (optional): Additional HTTP header content for request. One per line.</li>
                 <li><strong>cURL options</strong> (optional): cURL options for request. One per line.</li>
+                <li><strong>OAuth2 option</strong> (optional): Select "Client Credentials" to utilise OAuth2 for the API connection.</li>
+                <li><strong>OAuth2 configuration</strong> (required when OAuth2 option selected): JSON-format string of configuration information for the OAuth2 connection (piping supported).</li>
                 <li><strong>Response save field</strong> (optional): field in which to save the full request response.</li>
                 <li><strong>Response code save field</strong> (optional): field in which to save the HTTP code for the response.</li>
                 <li><strong>Field mapping - response property</strong> (repeating<sup>+</sup> - required): A separated<sup>*</sup> list of property names within the response.</li>
@@ -1054,7 +1086,7 @@ class REDCapREST extends AbstractExternalModule {
 
         // make export file contents 
         $filename = "REDCap_REST_Export_pid".$project_id."_".date("Y-m-d_Hi");
-        $titles = array('Description','Enabled','Trigger form(s)','Trigger condition','Destination URL','HTTP Method','Message Payload','Content Type','Additional Headers','cURL Options','Save Response To Field','Save Response Code To Field','Data Mapping - Property Name','Data Mapping - Save to Field');
+        $titles = array('Description','Enabled','Trigger form(s)','Trigger condition','Destination URL','HTTP Method','Message Payload','Content Type','Additional Headers','cURL Options','OAuth2 Option','Oauth2 Config','Save Response To Field','Save Response Code To Field','Data Mapping - Property Name','Data Mapping - Save to Field');
 
         $fp = fopen(APP_PATH_TEMP.$filename, 'w');
         fputcsv($fp, $titles, $delimiter, '"', '');
@@ -1093,11 +1125,17 @@ class REDCapREST extends AbstractExternalModule {
                     case 'curl-options':
                         $instructionRow[9] = $value ?? '';
                         break;
-                    case 'result-field':
+                    case 'oauth2-option':
                         $instructionRow[10] = $value ?? '';
                         break;
-                    case 'result-http-code':
+                    case 'oauth2-config':
                         $instructionRow[11] = $value ?? '';
+                        break;
+                    case 'result-field':
+                        $instructionRow[12] = $value ?? '';
+                        break;
+                    case 'result-http-code':
+                        $instructionRow[13] = $value ?? '';
                         break;
                     case 'map-to-field':
                         $pnArray = $dfArray = array();
@@ -1105,8 +1143,8 @@ class REDCapREST extends AbstractExternalModule {
                             $pnArray[] = $cfValue['prop-ref'] ?? '';
                             $dfArray[] = $cfValue['dest-field'] ?? '';
                         }
-                        $instructionRow[12] = implode($repeatValueSeparator, $pnArray);
-                        $instructionRow[13] = implode($repeatValueSeparator, $dfArray);
+                        $instructionRow[14] = implode($repeatValueSeparator, $pnArray);
+                        $instructionRow[15] = implode($repeatValueSeparator, $dfArray);
                         break;
                     default: break;
                 }
@@ -1177,6 +1215,8 @@ class REDCapREST extends AbstractExternalModule {
                 'content-type' => null,
                 'curl-headers' => null,
                 'curl-options' => null,
+                'oauth2-option' => null,
+                'oauth2-config' => null,
                 'result-field' => null,
                 'result-http-code' => null,
                 'map-to-field-prop-ref' => null,
@@ -1232,17 +1272,24 @@ class REDCapREST extends AbstractExternalModule {
         if (count($errors)) return $errors;
 
         // merge uploaded map-fields instructions into project settings, check for changes, then save
+        $n_current = count($currentSettings['message-config']);
+        $n_import = count($instructions);
         $newSettings = $currentSettings; // php arrays copy by val not ref
-        $newSettings['message-config'] = array_fill(0, $rowIndex, 'true'); // message-config has one element per instruction
+        $newSettings['message-config'] = array_fill(0, $n_import, 'true'); // message-config has one element per instruction
         foreach ($instructions as $idx => $instruction) {
             $instructionSettings = $instruction->getAsModuleSettings();
             foreach ($instructionSettings as $key => $value) {
                 $newSettings[$key][$idx] = $value; // e.g. $newSettings['instruction-description'][0] = 'this is the desc for the first instruction'
+                if ($n_import < $n_current) {
+                    for ($i=$n_import; $i < $n_current; $i++) { 
+                        unset($newSettings[$key][$i]);
+                    }
+                }
             }
         }
 
-            $checkKeys = array('instruction-description','message-enabled','trigger-form','trigger-logic','dest-url','http-method','payload','content-type','curl-headers','curl-options','result-field','result-http-code','prop-ref','dest-field');
-        if (
+        $checkKeys = array('instruction-description','message-enabled','trigger-form','trigger-logic','dest-url','http-method','payload','content-type','curl-headers','curl-options','oauth2-option','oauth2-config','result-field','result-http-code','prop-ref','dest-field');
+        if ($n_import === $n_current &&
             ModuleSettingsManager::are_equal(
                 ModuleSettingsManager::keep_keys($newSettings, $checkKeys), 
                 ModuleSettingsManager::keep_keys($currentSettings, $checkKeys)
@@ -1267,7 +1314,7 @@ class REDCapREST extends AbstractExternalModule {
      * @return array setting value separated into array by line, space, or pipe, whichever produces most elements
      */
     protected function makeRepeatingSetting(string $settingString): array {
-        $separators = array(PHP_EOL, ' ', '|');
+        $separators = array(PHP_EOL, ' ', '|',"\n");
         $settingArray = array();
         foreach ($separators as $sep) {
             $split = explode($sep, trim($settingString));

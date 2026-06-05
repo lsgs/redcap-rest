@@ -19,9 +19,11 @@ class Instruction {
     public $content_type;
     public $curl_headers;
     public $curl_options;
+    public $oauth2_option;
+    public $oauth2_config;
     public $result_field;
     public $result_http_code;
-    public $result_field_map;
+    public $map_to_field;
     
     public $config_errors;
     public $config_warnings;
@@ -35,7 +37,7 @@ class Instruction {
         if (!array_key_exists('instruction-description',$instruction)) $instruction['instruction-description'] = null;
 
         $simple_settings = array(
-            'instruction-description','message-enabled','trigger-form','trigger-logic','dest-url','http-method','payload','content-type','curl-headers','curl-options','result-field','result-http-code','map-to-field'
+            'instruction-description','message-enabled','trigger-form','trigger-logic','dest-url','http-method','payload','content-type','curl-headers','curl-options','oauth2-option','oauth2-config','result-field','result-http-code','map-to-field'
         );
         try {
             foreach ($simple_settings as $expected_setting) {
@@ -74,6 +76,12 @@ class Instruction {
             $this->config_errors[] = "a valid http method is required (".implode(', ', $allowed_methods).")";
         }
 
+        if (!empty($this->oauth2_option) && empty($this->oauth2_config)) {
+            $this->config_errors[] = "missing oauth2 configuration";
+        } else if (!empty($this->oauth2_option) && is_null(\json_decode($this->oauth2_config, true))) {
+            $this->config_errors[] = "could not parse oauth2 configuration as json";
+        }
+
         if (!empty($this->result_field) && !array_key_exists($this->result_field, $this->source_project->metadata)) {
             $this->config_errors[] = "invalid field for result \"".htmlspecialchars($this->result_field,ENT_QUOTES)."\"";
         }
@@ -82,8 +90,8 @@ class Instruction {
             $this->config_errors[] = "invalid field for result http code \"".htmlspecialchars($this->result_http_code,ENT_QUOTES)."\"";
         }
 
-        if (!empty($this->result_field_map) && is_array($this->result_field_map)) {
-            foreach ($this->result_field_map as $idx => $pair) {
+        if (!empty($this->map_to_field) && is_array($this->map_to_field)) {
+            foreach ($this->map_to_field as $idx => $pair) {
                 $prop_ref = trim($pair['prop-ref']);
                 $dest_field = trim($pair['dest-field']);
 
@@ -116,10 +124,12 @@ class Instruction {
         $instructionSettings['content-type'] = $this->content_type;
         $instructionSettings['curl-headers'] = $this->curl_headers;
         $instructionSettings['curl-options'] = $this->curl_options;
+        $instructionSettings['oauth2-option'] = $this->oauth2_option;
+        $instructionSettings['oauth2-config'] = $this->oauth2_config;
         $instructionSettings['result-field'] = $this->result_field;
         $instructionSettings['result-http-code'] = $this->result_http_code;
 
-        foreach ($this->result_field_map as $pair) {
+        foreach ($this->map_to_field as $pair) {
             $instructionSettings['map-to-field'][] = 'true';
             $instructionSettings['prop-ref'][] = $pair['prop-ref'];
             $instructionSettings['dest-field'][] = $pair['dest-field'];
