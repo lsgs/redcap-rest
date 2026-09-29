@@ -17,7 +17,7 @@ class OAuth2ClientCredentials extends OAuth2 {
 
         list($this->response, $this->info) = $this->module->curlCall($method, $url, $contentType, $authHeaders, $curlOptions, $payload);
         
-        if ($this->info['http_code'] === 401 && $allowRetry) {
+        if (($this->info['http_code'] === 401 || $this->info['http_code'] === 403) && $allowRetry) {
             // retry once with new token
             $this->access_token = null;
             $this->access_token_expiry = null;
