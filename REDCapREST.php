@@ -26,6 +26,7 @@ class REDCapREST extends AbstractExternalModule {
     protected $destURL;
     protected $token;
     protected $tokenRef;
+    protected $resolvedTokens;
     protected $curlOpts;
     protected $title;
     
@@ -48,6 +49,7 @@ class REDCapREST extends AbstractExternalModule {
             $this->destURL = $this->pipe($instruction['dest-url']);
             $this->token = '';
             $this->tokenRef = '';
+            $this->resolvedTokens = array();
             $method = $instruction['http-method'];
             $contentType = $this->makeContentType($instruction['content-type']);
             $curlHeaders = $this->makeCurlHeadersArray($instruction['curl-headers']);
@@ -72,7 +74,13 @@ class REDCapREST extends AbstractExternalModule {
             $payloadForLog = $instruction['payload'];
             try {
                 $payload = $this->formatPayload($instruction['payload'], $contentType);
-                $payloadForLog = (empty($this->token)) ? $payload : str_replace($this->token, '|||Token '.$this->tokenRef.' removed|||', $payload);
+                $payloadForLog = $payload;
+                if (!empty($this->resolvedTokens)) {
+                    foreach ($this->resolvedTokens as $ref => $value) {
+                        if (empty($value)) continue;
+                        $payloadForLog = str_replace($value, '|||Token '.$ref.' removed|||', $payloadForLog);
+                    }
+                }
             } catch (\JsonException $je) {
                 \REDCap::logEvent($this->title, 'Error parsing payload JSON string: '.$je->getMessage().PHP_EOL.$payloadForLog, '', $this->record, $this->event_id);
                 return;
@@ -195,34 +203,58 @@ class REDCapREST extends AbstractExternalModule {
      * @return string 
      */
     public function pipeApiToken($string) {
-        $found = false;
-        $matches = array();
         $pattern = "/\[token-ref:([-\w]+)\]/";
-        if (!preg_match($pattern, $string, $matches)) return $string;
+        $matches = array();
+        if (!preg_match_all($pattern, $string, $matches, PREG_SET_ORDER)) return $string;
 
+        if (!is_array($this->resolvedTokens)) $this->resolvedTokens = array();
         $systemTokens = $this->getSubSettings('token-management');
-        foreach ($systemTokens as $i => $systemToken) {
-            if (  array_key_exists(1, $matches) && $matches[1]==$systemToken['token-ref'] &&
-                starts_with($this->destURL, $systemToken['token-url']) ) {
-                $found = true;
-                break;
+
+        // Resolve every distinct [token-ref:...] occurrence against its own
+        // matching system token entry (a config string may carry several, e.g.
+        // the OAuth2 client-id and client-secret references).
+        $resolved = array();
+        foreach ($matches as $match) {
+            $ref = $match[1];
+            if (array_key_exists($ref, $resolved)) continue; // resolve each ref once
+
+            $found = false;
+            $systemToken = null;
+            foreach ($systemTokens as $i => $candidate) {
+                if ( $ref==$candidate['token-ref'] &&
+                    starts_with($this->destURL, $candidate['token-url']) ) {
+                    $systemToken = $candidate;
+                    $found = true;
+                    break;
+                }
             }
+
+            if (!$found) throw new \Exception('Token with reference "'.$ref.'" for destination URL "'.$this->destURL.'" not found in system-level token management.');
+
+            $token = '';
+            if ($systemToken['token-lookup-option']==='lookup') {
+                $sql = "select api_token from redcap_user_rights where project_id=? and username=? limit 1";
+                $q = $this->query($sql, [$systemToken['token-project'], $systemToken['token-username']]);
+                $r = db_fetch_assoc($q);
+                $token = $this->escape($r["api_token"]);
+            } else if ($systemToken['token-lookup-option']==='specify') {
+                $token = $this->escape($systemToken['token-specified']);
+            }
+
+            if (empty($token)) throw new \Exception('Could not read token with reference "'.$ref.'" in system-level token management.');
+
+            $resolved[$ref] = $token;
+            // Record for log masking and keep $this->token/$this->tokenRef holding
+            // the last-resolved pair for backward compatibility.
+            $this->resolvedTokens[$ref] = $token;
+            $this->token = $token;
+            $this->tokenRef = $ref;
         }
 
-        if (!$found) throw new \Exception('Token with reference "'.$matches[1].'" for destination URL "'.$this->destURL.'" not found in system-level token management.');
-        
-        if ($systemToken['token-lookup-option']==='lookup') {
-            $sql = "select api_token from redcap_user_rights where project_id=? and username=? limit 1";
-            $q = $this->query($sql, [$systemToken['token-project'], $systemToken['token-username']]);
-            $r = db_fetch_assoc($q);
-            $this->token = $this->escape($r["api_token"]);
-        } else if ($systemToken['token-lookup-option']==='specify') {
-            $this->token = $this->escape($systemToken['token-specified']);
+        foreach ($resolved as $ref => $token) {
+            $string = str_replace('[token-ref:'.$ref.']', $token, $string);
         }
-
-        if (empty($this->token)) throw new \Exception('Could not read token with reference "'.$matches[1].'" in system-level token management.');
-        $this->tokenRef = $matches[1];
-        return str_replace($matches[0], $this->token, $string);
+        return $string;
     }
 
     /**
