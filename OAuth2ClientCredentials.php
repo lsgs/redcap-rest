@@ -17,7 +17,7 @@ class OAuth2ClientCredentials extends OAuth2 {
 
         list($this->response, $this->info) = $this->module->curlCall($method, $url, $contentType, $authHeaders, $curlOptions, $payload);
         
-        if ($this->info['http_code'] === 401 && $allowRetry) {
+        if (($this->info['http_code'] === 401 || $this->info['http_code'] === 403) && $allowRetry) {
             // retry once with new token
             $this->access_token = null;
             $this->access_token_expiry = null;
@@ -48,13 +48,28 @@ class OAuth2ClientCredentials extends OAuth2 {
 
         list($response, $info) = $this->module->curlCall('POST', $this->token_endpoint, 'application/x-www-form-urlencoded', array(), $curlOptions, $payload);
 
-        if (!isset($info['http_code']) || $info['http_code'] !== 200) {
-            throw new \Exception('Unable to obtain access token');
+        $httpCode = $info['http_code'] ?? 'unknown';
+
+        $tokenDetails = json_decode($response, true);
+
+        // Mask the response body before it reaches any log line or exception message.
+        // 1) Mask resolved [token-ref:...] values (e.g. client-id/client-secret) via
+        //    the module's single source of truth. 2) Mask the returned access_token so
+        //    it never appears in cleartext (also run defensively on error bodies).
+        $maskedBody = $this->module->maskSecrets($response);
+        if (isset($tokenDetails['access_token']) && $tokenDetails['access_token'] !== '') {
+            $maskedBody = str_replace($tokenDetails['access_token'], '|||access_token removed|||', $maskedBody);
         }
 
-        $tokenDetails = json_decode($response, true); 
+        // Log every token exchange attempt (success and failure).
+        $this->module->log('OAuth2 token exchange: POST '.$this->token_endpoint.' -> HTTP '.$httpCode.' body: '.$maskedBody);
+
+        if (!isset($info['http_code']) || $info['http_code'] !== 200) {
+            throw new \Exception('Unable to obtain access token (HTTP '.$httpCode.'): '.$maskedBody);
+        }
+
         if (!isset($tokenDetails['access_token']) || !isset($tokenDetails['expires_in'])) {
-            throw new \Exception('Unexpected access token response');
+            throw new \Exception('Unexpected access token response (HTTP '.$httpCode.'): '.$maskedBody);
         }
 
         $this->access_token = $tokenDetails['access_token'];

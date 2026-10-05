@@ -39,8 +39,13 @@ class OAuth2ClientCredentialsTest extends TestCase
         ]);
     }
 
+    /** @var string[] Captured messages passed to the mock module's log() */
+    private array $loggedMessages = [];
+
     private function makeMockModule(): REDCapREST
     {
+        $this->loggedMessages = [];
+
         $mock = $this->getMockBuilder(REDCapREST::class)
             ->disableOriginalConstructor()
             ->onlyMethods(['curlCall', 'pipeApiToken', 'getProjectSetting', 'setProjectSetting', 'log'])
@@ -53,6 +58,13 @@ class OAuth2ClientCredentialsTest extends TestCase
         // getProjectSetting returns an empty array for oauth2-cache
         $mock->method('getProjectSetting')
             ->willReturn([]);
+
+        // Capture logged messages so tests can assert on what is logged
+        $mock->method('log')
+            ->willReturnCallback(function ($message) {
+                $this->loggedMessages[] = $message;
+                return 0;
+            });
 
         return $mock;
     }
@@ -346,6 +358,109 @@ class OAuth2ClientCredentialsTest extends TestCase
 
         $oauth2 = new OAuth2ClientCredentials($module, $this->makeInstruction(), 0);
         $oauth2->oauth2Call('GET', 'https://api.example.com/data', 'application/json', [], [], '');
+    }
+
+    // ---------------------------------------------------------------
+    // Token-exchange logging and masking (Increment A)
+    // ---------------------------------------------------------------
+
+    /**
+     * (a) A failed (non-200) token exchange logs the endpoint URL and HTTP status,
+     *     and the thrown exception message includes the status code.
+     */
+    public function testFailedExchangeLogsStatusAndEnrichedException(): void
+    {
+        $module = $this->makeMockModule();
+
+        $module->method('curlCall')
+            ->willReturn(['{"error":"invalid_client"}', ['http_code' => 401]]);
+
+        $oauth2 = new OAuth2ClientCredentials($module, $this->makeInstruction(), 0);
+
+        $thrown = null;
+        try {
+            $oauth2->oauth2Call('GET', 'https://api.example.com/data', 'application/json', [], [], '');
+        } catch (\Exception $e) {
+            $thrown = $e;
+        }
+
+        // Exception enriched with status, preserving the original substring
+        $this->assertNotNull($thrown, 'Expected an exception on non-200 token exchange');
+        $this->assertStringContainsString('Unable to obtain access token', $thrown->getMessage());
+        $this->assertStringContainsString('401', $thrown->getMessage());
+
+        // A log entry recorded the endpoint and HTTP status
+        $exchangeLogs = array_filter($this->loggedMessages, function ($m) {
+            return strpos($m, 'OAuth2 token exchange') !== false;
+        });
+        $this->assertNotEmpty($exchangeLogs, 'Expected a token-exchange log entry');
+        $combined = implode("\n", $exchangeLogs);
+        $this->assertStringContainsString('https://auth.example.com/token', $combined);
+        $this->assertStringContainsString('HTTP 401', $combined);
+    }
+
+    /**
+     * (b) The returned access_token is masked in every logged message — the raw
+     *     token string must never appear in cleartext in a log line.
+     */
+    public function testAccessTokenMaskedInLogs(): void
+    {
+        $module = $this->makeMockModule();
+
+        $sentinel = 'SUPER-SECRET-TOKEN-XYZ';
+        $module->method('curlCall')
+            ->willReturnCallback(function ($method, $url) use ($sentinel) {
+                if ($url === 'https://auth.example.com/token') {
+                    return [$this->makeTokenResponse($sentinel), ['http_code' => 200]];
+                }
+                return ['ok', ['http_code' => 200]];
+            });
+
+        $oauth2 = new OAuth2ClientCredentials($module, $this->makeInstruction(), 0);
+        $oauth2->oauth2Call('GET', 'https://api.example.com/data', 'application/json', [], [], '');
+
+        // The exchange was logged with the endpoint and a 200 status
+        $exchangeLogs = array_filter($this->loggedMessages, function ($m) {
+            return strpos($m, 'OAuth2 token exchange') !== false;
+        });
+        $this->assertNotEmpty($exchangeLogs, 'Expected a token-exchange log entry');
+        $combined = implode("\n", $exchangeLogs);
+        $this->assertStringContainsString('https://auth.example.com/token', $combined);
+        $this->assertStringContainsString('HTTP 200', $combined);
+
+        // The raw access_token must NOT appear in ANY logged message
+        foreach ($this->loggedMessages as $message) {
+            $this->assertStringNotContainsString($sentinel, $message, 'Raw access_token leaked into a log message');
+        }
+        // And the masking placeholder is present
+        $this->assertStringContainsString('|||access_token removed|||', $combined);
+    }
+
+    /**
+     * (c) A resolved secret value (present in the module's resolvedTokens map) is
+     *     masked by maskSecrets(). The existing OAuth2 mock does not populate
+     *     resolvedTokens (pipeApiToken returns its argument unchanged and records
+     *     nothing), so this exercises REDCapREST::maskSecrets() directly via a
+     *     reflection-set resolvedTokens map — the single source of truth the
+     *     OAuth2 class relies on for masking.
+     */
+    public function testMaskSecretsReplacesResolvedTokenValue(): void
+    {
+        $module = $this->getMockBuilder(REDCapREST::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods([])
+            ->getMock();
+
+        $secret = 'RESOLVED-CLIENT-SECRET-123';
+        $ref = 'my-service';
+
+        $prop = new \ReflectionProperty(REDCapREST::class, 'resolvedTokens');
+        $prop->setValue($module, [$ref => $secret]);
+
+        $masked = $module->maskSecrets('body contains '.$secret.' here');
+
+        $this->assertStringNotContainsString($secret, $masked, 'Resolved secret value leaked through maskSecrets');
+        $this->assertStringContainsString('|||Token '.$ref.' removed|||', $masked);
     }
 
     // ---------------------------------------------------------------

@@ -17,6 +17,7 @@ class REDCapREST extends AbstractExternalModule {
     const MODULE_TITLE = "REDCap REST";
     protected const DISPLAY_MAX_FIELD_MAP = 5;
     protected const IMPORT_ACTION = 'import-instructions';
+    private const TOKEN_REF_FIELDS = array('payload', 'curl-headers', 'oauth2-config');
     protected $configArray;
     protected $Proj;
     protected $record;
@@ -26,6 +27,7 @@ class REDCapREST extends AbstractExternalModule {
     protected $destURL;
     protected $token;
     protected $tokenRef;
+    protected $resolvedTokens;
     protected $curlOpts;
     protected $title;
     
@@ -48,6 +50,7 @@ class REDCapREST extends AbstractExternalModule {
             $this->destURL = $this->pipe($instruction['dest-url']);
             $this->token = '';
             $this->tokenRef = '';
+            $this->resolvedTokens = array();
             $method = $instruction['http-method'];
             $contentType = $this->makeContentType($instruction['content-type']);
             $curlHeaders = $this->makeCurlHeadersArray($instruction['curl-headers']);
@@ -72,7 +75,7 @@ class REDCapREST extends AbstractExternalModule {
             $payloadForLog = $instruction['payload'];
             try {
                 $payload = $this->formatPayload($instruction['payload'], $contentType);
-                $payloadForLog = (empty($this->token)) ? $payload : str_replace($this->token, '|||Token '.$this->tokenRef.' removed|||', $payload);
+                $payloadForLog = $this->maskSecrets($payload);
             } catch (\JsonException $je) {
                 \REDCap::logEvent($this->title, 'Error parsing payload JSON string: '.$je->getMessage().PHP_EOL.$payloadForLog, '', $this->record, $this->event_id);
                 return;
@@ -194,35 +197,61 @@ class REDCapREST extends AbstractExternalModule {
      * @param string
      * @return string 
      */
-    public function pipeApiToken($string) {
-        $found = false;
-        $matches = array();
+    public function pipeApiToken($string, $targetURL = null) {
         $pattern = "/\[token-ref:([-\w]+)\]/";
-        if (!preg_match($pattern, $string, $matches)) return $string;
+        $matches = array();
+        if (!preg_match_all($pattern, $string, $matches, PREG_SET_ORDER)) return $string;
 
+        $scopeURL = ($targetURL !== null && $targetURL !== '') ? $targetURL : $this->destURL;
+
+        if (!is_array($this->resolvedTokens)) $this->resolvedTokens = array();
         $systemTokens = $this->getSubSettings('token-management');
-        foreach ($systemTokens as $i => $systemToken) {
-            if (  array_key_exists(1, $matches) && $matches[1]==$systemToken['token-ref'] &&
-                starts_with($this->destURL, $systemToken['token-url']) ) {
-                $found = true;
-                break;
+
+        // Resolve every distinct [token-ref:...] occurrence against its own
+        // matching system token entry (a config string may carry several, e.g.
+        // the OAuth2 client-id and client-secret references).
+        $resolved = array();
+        foreach ($matches as $match) {
+            $ref = $match[1];
+            if (array_key_exists($ref, $resolved)) continue; // resolve each ref once
+
+            $found = false;
+            $systemToken = null;
+            foreach ($systemTokens as $i => $candidate) {
+                if ( $ref==$candidate['token-ref'] &&
+                    starts_with($scopeURL, $candidate['token-url']) ) {
+                    $systemToken = $candidate;
+                    $found = true;
+                    break;
+                }
             }
+
+            if (!$found) throw new \Exception('Token with reference "'.$ref.'" for destination URL "'.$scopeURL.'" not found in system-level token management.');
+
+            $token = '';
+            if ($systemToken['token-lookup-option']==='lookup') {
+                $sql = "select api_token from redcap_user_rights where project_id=? and username=? limit 1";
+                $q = $this->query($sql, [$systemToken['token-project'], $systemToken['token-username']]);
+                $r = db_fetch_assoc($q);
+                $token = $this->escape($r["api_token"]);
+            } else if ($systemToken['token-lookup-option']==='specify') {
+                $token = $this->escape($systemToken['token-specified']);
+            }
+
+            if (empty($token)) throw new \Exception('Could not read token with reference "'.$ref.'" in system-level token management.');
+
+            $resolved[$ref] = $token;
+            // Record for log masking and keep $this->token/$this->tokenRef holding
+            // the last-resolved pair for backward compatibility.
+            $this->resolvedTokens[$ref] = $token;
+            $this->token = $token;
+            $this->tokenRef = $ref;
         }
 
-        if (!$found) throw new \Exception('Token with reference "'.$matches[1].'" for destination URL "'.$this->destURL.'" not found in system-level token management.');
-        
-        if ($systemToken['token-lookup-option']==='lookup') {
-            $sql = "select api_token from redcap_user_rights where project_id=? and username=? limit 1";
-            $q = $this->query($sql, [$systemToken['token-project'], $systemToken['token-username']]);
-            $r = db_fetch_assoc($q);
-            $this->token = $this->escape($r["api_token"]);
-        } else if ($systemToken['token-lookup-option']==='specify') {
-            $this->token = $this->escape($systemToken['token-specified']);
+        foreach ($resolved as $ref => $token) {
+            $string = str_replace('[token-ref:'.$ref.']', $token, $string);
         }
-
-        if (empty($this->token)) throw new \Exception('Could not read token with reference "'.$matches[1].'" in system-level token management.');
-        $this->tokenRef = $matches[1];
-        return str_replace($matches[0], $this->token, $string);
+        return $string;
     }
 
     /**
@@ -413,6 +442,22 @@ class REDCapREST extends AbstractExternalModule {
     }
 
     /**
+     * maskSecrets()
+     * Replace any resolved [token-ref:...] values with a masking placeholder so
+     * secrets never appear in cleartext in log output. Single source of truth for
+     * resolved-token masking, reused by redcap_save_record() and the OAuth2 classes.
+     */
+    public function maskSecrets(string $text): string {
+        if (!empty($this->resolvedTokens)) {
+            foreach ($this->resolvedTokens as $ref => $value) {
+                if (empty($value)) continue;
+                $text = str_replace($value, '|||Token '.$ref.' removed|||', $text);
+            }
+        }
+        return $text;
+    }
+
+    /**
      * call()
      * Send request using curl
      */
@@ -455,6 +500,90 @@ class REDCapREST extends AbstractExternalModule {
         return array($response, $info);
     }
 
+    /**
+     * buildTokenRefHelpText()
+     * Pure, names-only helper (the Name_Injection_Helper). Extracts the reference
+     * NAMES from the system token-management sub-settings, dedupes (first-seen
+     * order), drops empty/malformed entries, HTML-escapes each name, and returns
+     * the Help_Text HTML to inject near the token-ref fields.
+     *
+     * Only reference names are surfaced; token values (token-specified) and
+     * token-url scope context are never included. On an empty name list a neutral
+     * no-references note is returned instead of a name list.
+     *
+     * @param array $systemTokens token-management sub-settings array
+     * @return string Help_Text HTML fragment
+     */
+    private function buildTokenRefHelpText(array $systemTokens): string
+    {
+        // Extract names defensively: ignore entries that are not arrays, that lack
+        // 'token-ref', or whose token-ref is empty/whitespace or non-string.
+        $names = array();
+        foreach ($systemTokens as $entry) {
+            if (!is_array($entry) || !array_key_exists('token-ref', $entry)) continue;
+            $ref = $entry['token-ref'];
+            if (!is_string($ref)) continue;
+            $ref = trim($ref);
+            if ($ref === '') continue;
+            $names[$ref] = true; // dedupe, preserve first-seen order
+        }
+        $names = array_keys($names);
+
+        if (empty($names)) {
+            // Neutral note, no name list.
+            return '<div class="text-muted" style="font-size:85%;">'
+                 . 'No system token references are defined. '
+                 . 'Ask your administrator to configure token references at the system level.'
+                 . '</div>';
+        }
+
+        // Names only; never any token value. Escape user-defined names.
+        $items = array();
+        foreach ($names as $n) {
+            $items[] = '<code>[token-ref:' . htmlspecialchars($n, ENT_QUOTES) . ']</code>';
+        }
+        return '<div class="text-muted" style="font-size:85%;">'
+             . 'Available system token references: ' . implode(' ', $items)
+             . '</div>';
+    }
+
+    /**
+     * injectTokenRefHelp()
+     * Recursively walks the configuration $settings structure and appends the
+     * given Help_Text to the displayed name of each Token_Ref_Field (payload,
+     * curl-headers, oauth2-config). Descends into any nested sub_settings so the
+     * targets nested under message-config are reached.
+     *
+     * Only the 'name' of a matched definition is mutated; 'key', 'type',
+     * 'choices', and any editable value are left intact.
+     *
+     * @param array  $settings the settings/sub_settings definition array
+     * @param string $helpText the Help_Text HTML fragment to append
+     * @return array the modified $settings
+     */
+    private function injectTokenRefHelp(array $settings, string $helpText): array
+    {
+        foreach ($settings as $i => $def) {
+            if (!is_array($def)) continue;
+
+            // Append to the field's displayed name if it is a target. Only 'name'
+            // is touched - key, type, and any values are left intact.
+            if (isset($def['key']) && in_array($def['key'], self::TOKEN_REF_FIELDS, true)) {
+                $name = isset($def['name']) && is_string($def['name']) ? $def['name'] : '';
+                $settings[$i]['name'] = $name . $helpText;
+            }
+
+            // Descend into nested setting definitions (message-config and any
+            // deeper sub_settings). This is what the top-level summary-page loop
+            // does NOT do.
+            if (isset($def['sub_settings']) && is_array($def['sub_settings'])) {
+                $settings[$i]['sub_settings'] =
+                    $this->injectTokenRefHelp($def['sub_settings'], $helpText);
+            }
+        }
+        return $settings;
+    }
+
     /*
      * redcap_module_configuration_settings()
      * Triggered when the system or project configuration dialog is displayed for a given module.
@@ -470,6 +599,11 @@ class REDCapREST extends AbstractExternalModule {
                     break;
                 }
             }
+
+            // Surface system token-ref names into the token-ref fields (read at display time)
+            $systemTokens = $this->getSubSettings('token-management');
+            $helpText     = $this->buildTokenRefHelpText($systemTokens);
+            $settings     = $this->injectTokenRefHelp($settings, $helpText);
         }
         return $settings;
     }
@@ -540,6 +674,7 @@ class REDCapREST extends AbstractExternalModule {
         $versionDropdown = \RCView::select(array('id'=>'module-version','name'=>'module-version'), $versions);
 
         $instructions = $this->getSubSettings('message-config');
+        $systemTokens = $this->getSubSettings('token-management'); // injected into Instruction for token-ref scope validation
         $columns = array(
             array('title'=>'#','tdclass'=>'text-center','getter'=>function(array $instruction){ return '<span class="module-seq"></span>'; }),
             array('title'=>'Description','tdclass'=>'text-center','getter'=>function(array $instruction){ 
@@ -552,9 +687,9 @@ class REDCapREST extends AbstractExternalModule {
                     return '<span class="module-hidden">'.str_replace("\n",'<br>',$desc).'</span><button class="module-btn-show btn btn-xs btn-outline-primary" title="View full description">'.$descDisplay.'</button>';
                 }
             }),
-            array('title'=>'Enabled','tdclass'=>'text-center','getter'=>function(array $instruction){ 
+            array('title'=>'Enabled','tdclass'=>'text-center','getter'=>function(array $instruction) use ($systemTokens){ 
                 $enabledDesc = '<i class="fa-solid '.(($instruction['message-enabled']) ? 'fa-check text-success' : 'fa-times text-danger').'"></i>';
-                $messageInstruction = new Instruction($instruction);
+                $messageInstruction = new Instruction($instruction, null, $systemTokens);
                 $configErrors = $messageInstruction->getConfigErrors();
                 if (count($configErrors)) {
                     $errMsg = '<ul><li>'.implode('</li><li>', $configErrors).'</li></ul>';
@@ -582,7 +717,7 @@ class REDCapREST extends AbstractExternalModule {
                     return '<span class="module-hidden"><pre>'.\htmlspecialchars($logic,ENT_QUOTES).'</pre></span><button class="module-btn-show btn btn-xs btn-outline-primary" title="View Trigger Logic"><i class="fa-solid fa-bolt mx-2"></i></button>';
                 }
             }),
-            array('title'=>'Destination URL','tdclass'=>'text-center','getter'=>function(array $instruction){ 
+            array('title'=>'Request URL','tdclass'=>'text-center','getter'=>function(array $instruction){ 
                 $dest_url = \htmlspecialchars($instruction['dest-url'], ENT_QUOTES);
                 if (empty($dest_url)) {
                     return '<i class="fa-solid fa-minus text-danger"></i>';
@@ -801,7 +936,7 @@ class REDCapREST extends AbstractExternalModule {
                 </li>
                 <li><strong>Trigger form(s)</strong> (optional): A separated<sup>*</sup> list of form names.</li>
                 <li><strong>Trigger condition</strong> (optional): A REDCap logic expression.</li>
-                <li><strong>Destination URL</strong> (required): URL of endpoint where message will be sent.</li>
+                <li><strong>Request URL</strong> (required): URL of endpoint where message will be sent.</li>
                 <li><strong>HTTP method</strong> (required): The desired HTTP verb: <code>POST</code> <code>GET</code> <code>PUT</code> <code>PATCH</code> <code>DELETE</code>.</li>
                 <li><strong>Payload</strong> (optional): Payload form e.g. as JSON (piping supported).</li>
                 <li><strong>Content type</strong> (optional): Content type for request, e.g. application/json (default), application/x-www-form-urlencoded.</li>
@@ -1086,7 +1221,7 @@ class REDCapREST extends AbstractExternalModule {
 
         // make export file contents 
         $filename = "REDCap_REST_Export_pid".$project_id."_".date("Y-m-d_Hi");
-        $titles = array('Description','Enabled','Trigger form(s)','Trigger condition','Destination URL','HTTP Method','Message Payload','Content Type','Additional Headers','cURL Options','OAuth2 Option','Oauth2 Config','Save Response To Field','Save Response Code To Field','Data Mapping - Property Name','Data Mapping - Save to Field');
+        $titles = array('Description','Enabled','Trigger form(s)','Trigger condition','Request URL','HTTP Method','Message Payload','Content Type','Additional Headers','cURL Options','OAuth2 Option','Oauth2 Config','Save Response To Field','Save Response Code To Field','Data Mapping - Property Name','Data Mapping - Save to Field');
 
         $fp = fopen(APP_PATH_TEMP.$filename, 'w');
         fputcsv($fp, $titles, $delimiter, '"', '');

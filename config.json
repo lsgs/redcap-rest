@@ -23,13 +23,13 @@
             "sub_settings": [
                 {
                     "key": "token-ref",
-                    "name": "Arbitrary unique reference/key<p class=\"text-muted\">Reference in project module settings in piping-style form as <code>[token-ref:xyz]</code> where <code>xyz</code> matches this reference.</p>",
+                    "name": "Reference name<p class=\"text-muted\">Reference in project module settings in piping-style form as <code>[token-ref:xyz]</code> where <code>xyz</code> matches this reference.</p>",
                     "type": "text",
                     "required": true
                 },
                 {
                     "key": "token-url",
-                    "name": "Destination URL (pipe token only in requests to this URL)<p class=\"text-muted\">Help prevent exposure of token by directing request to arbitrary URL.</p>",
+                    "name": "Request URL prefix (token scope)<p class=\"text-muted\">The token is substituted only when the outgoing request URL begins with this value (a prefix match). Helps prevent exposing the token to an unintended URL.</p>",
                     "type": "text",
                     "required": true
                 },
@@ -116,7 +116,7 @@
                     "type": "text"
                 },
                 {
-                    "name": "Destination URL<div class=\"text-muted\">Piping supported<br>Try POST https://redcap.yourplace.org/api/?type=module&prefix=redcap_rest&page=example&NOAUTH with payload {\"result\":\"RESULT\"}</div>",
+                    "name": "Request URL<div class=\"text-muted\">Piping supported<br>Try POST https://redcap.yourplace.org/api/?type=module&prefix=redcap_rest&page=example&NOAUTH with payload {\"result\":\"RESULT\"}</div>",
                     "key": "dest-url",
                     "required": true,
                     "type": "text"
@@ -178,7 +178,7 @@
                     ]
                 },
                 {
-                    "name": "OAuth2 configuration settings (JSON format)<br>Example:<pre>{<br>  \"auth-url\": \"https://example.com/auth\",<br>  \"client-id\": \"[token-ref:myclientid]\",<br>  \"client-secret\": \"[token-ref:mysecret]\",<br>  \"username\": \"user1\",<br>  \"password\": \"[token-ref:mypw]\"<br>}</pre>",
+                    "name": "OAuth2 configuration settings (JSON format)<br>Example:<pre>{<br>  \"auth-url\": \"https://example.com/oauth/token\",<br>  \"client-id\": \"[token-ref:myclientid]\",<br>  \"client-secret\": \"[token-ref:mysecret]\"<br>}</pre>",
                     "key": "oauth2-config",
                     "required": false,
                     "type": "textarea"
