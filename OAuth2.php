@@ -27,7 +27,9 @@ abstract class OAuth2 {
         $this->instruction = $instruction;
         $this->instruction_index = $index;
 
-        $configString = $this->module->pipeApiToken($instruction['oauth2-config']);
+        $rawConfig = json_decode($instruction['oauth2-config'], true);
+        $authUrl = is_array($rawConfig) && isset($rawConfig['auth-url']) ? $rawConfig['auth-url'] : null;
+        $configString = $this->module->pipeApiToken($instruction['oauth2-config'], $authUrl);
         $config = json_decode($configString, true);
 
         $this->token_endpoint = $config['auth-url'];

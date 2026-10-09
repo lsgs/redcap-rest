@@ -9,6 +9,7 @@
 namespace ExternalModules {
     if (!class_exists('ExternalModules\AbstractExternalModule')) {
         abstract class AbstractExternalModule {
+            public function getUrl($path, $noAuth = false, $useApiEndpoint = false) { return $path; }
             public function getSubSettings($key) { return []; }
             public function getProjectSetting($key) { return []; }
             public function setProjectSetting($key, $value) {}
