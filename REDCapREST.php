@@ -493,8 +493,7 @@ class REDCapREST extends AbstractExternalModule {
 
         $response = curl_exec($ch);
         $info = curl_getinfo($ch);
-        curl_close($ch);
-
+        
         $this->log('cURL info: '.json_encode($info)); // log response info useful for debugging responses
         
         return array($response, $info);
