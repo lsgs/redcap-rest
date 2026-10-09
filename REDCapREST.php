@@ -507,15 +507,19 @@ class REDCapREST extends AbstractExternalModule {
      * order), drops empty/malformed entries, HTML-escapes each name, and returns
      * the Help_Text HTML to inject near the token-ref fields.
      *
-     * Only reference names are surfaced; token values (token-specified) and
-     * token-url scope context are never included. On an empty name list a neutral
-     * no-references note is returned instead of a name list.
+     * Only token reference names for the current project are surfaced. That is, 
+     * reference names defined for the current project, and token values (token-specified)
+     * that are already in used for this project's instructions.
+     * 
+     * On an empty name list a neutral no-references note is returned instead of a name list.
      *
      * @param array $systemTokens token-management sub-settings array
      * @return string Help_Text HTML fragment
      */
     private function buildTokenRefHelpText(array $systemTokens): string
     {
+        $projectSettingsString = \json_encode($this->getProjectSettings()) ?? '';
+
         // Extract names defensively: ignore entries that are not arrays, that lack
         // 'token-ref', or whose token-ref is empty/whitespace or non-string.
         $names = array();
@@ -525,15 +529,21 @@ class REDCapREST extends AbstractExternalModule {
             if (!is_string($ref)) continue;
             $ref = trim($ref);
             if ($ref === '') continue;
-            $names[$ref] = true; // dedupe, preserve first-seen order
+
+            $forThisProject = (($entry['token-project'] ?? null) == $this->getProjectId());
+            $usedThisProject = (strpos($projectSettingsString, '[token-ref:' . $ref . ']') !== false);
+
+            if ($forThisProject || $usedThisProject) {
+                $names[$ref] = true; // dedupe, preserve first-seen order
+            }
         }
         $names = array_keys($names);
 
         if (empty($names)) {
             // Neutral note, no name list.
             return '<div class="text-muted" style="font-size:85%;">'
-                 . 'No system token references are defined. '
-                 . 'Ask your administrator to configure token references at the system level.'
+                 . 'No system token references are yet defined for or used in this project. '
+                 . '<br>Ask your administrator to configure token references at the system level.'
                  . '</div>';
         }
 
@@ -543,7 +553,8 @@ class REDCapREST extends AbstractExternalModule {
             $items[] = '<code>[token-ref:' . htmlspecialchars($n, ENT_QUOTES) . ']</code>';
         }
         return '<div class="text-muted" style="font-size:85%;">'
-             . 'Available system token references: ' . implode(' ', $items)
+             . 'Available system token references defined for or used in this project:<br>' . implode(' ', $items)
+             . '<br>Ask your administrator to configure token references at the system level.'
              . '</div>';
     }
 
@@ -594,7 +605,7 @@ class REDCapREST extends AbstractExternalModule {
         if (!empty($project_id)) {
             foreach ($settings as $si => $sarray) {
                 if ($sarray['key']=='summary-page') {
-                    $url = $this->getUrl('summary.php',false,false);
+                    $url = $this->escape($this->getUrl('summary.php',false,false));
                     $settings[$si]['name'] = str_replace('href="#"', 'href="'.$url.'"', $settings[$si]['name']);
                     break;
                 }
@@ -916,7 +927,7 @@ class REDCapREST extends AbstractExternalModule {
         }
         echo '</tbody></table></div>';
 
-        $url = $this->getUrl('export_import.php', false, false);
+        $url = $this->escape($this->getUrl('export_import.php', false, false));
 
         $this->initializeJavascriptModuleObject();
         ?>
@@ -1155,12 +1166,12 @@ class REDCapREST extends AbstractExternalModule {
         if (!defined('PAGE')) return;
         if (empty($project_id) || PAGE!=='manager/project.php') return;
 
-        $summaryPageUrl = $this->getUrl('summary.php',false,false);
+        $url = $this->escape($this->getUrl('summary.php',false,false));
         ?>
         <script type="text/javascript">
             /*REDCap REST summary page link*/
             $(document).ready(function(){
-                let url = '<?=$summaryPageUrl?>';
+                let url = '<?=$url?>';
                 let loc = $('tr[data-module="redcap_rest"] div.external-modules-description');
                 $(loc).append('<div class="mt-1"><a href="'+url+'"><i class="fa-solid fa-list-ol" style="margin-right: 5px;"></i> View Summary of Instructions</a>')
             });

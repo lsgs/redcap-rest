@@ -98,6 +98,8 @@ class Instruction {
                 $prop_ref = trim($pair['prop-ref']);
                 $dest_field = trim($pair['dest-field']);
 
+                if ($idx===0 && empty($prop_ref) && empty($dest_field)) continue; // allow first pair to be empty (no mapping)
+                
                 if (is_null($prop_ref) || $prop_ref==='') {
                     $this->config_errors[] = "property reference required for result mapping, pair #".($idx+1);
                 }
