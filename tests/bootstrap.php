@@ -12,6 +12,8 @@ namespace ExternalModules {
             public function getUrl($path, $noAuth = false, $useApiEndpoint = false) { return $path; }
             public function getSubSettings($key) { return []; }
             public function getProjectSetting($key) { return []; }
+            public function getProjectSettings() { return []; }
+            public function getProjectId() { return null; }
             public function setProjectSetting($key, $value) {}
             public function getSystemSetting($key) { return null; }
             public function query($sql, $params = []) { return null; }
