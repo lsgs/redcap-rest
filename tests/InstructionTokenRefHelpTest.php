@@ -35,10 +35,17 @@ class InstructionTokenRefHelpTest extends TestCase
      */
     private function makeModule(): REDCapREST
     {
-        return $this->getMockBuilder(REDCapREST::class)
+        $module = $this->getMockBuilder(REDCapREST::class)
             ->disableOriginalConstructor()
-            ->onlyMethods([])
+            ->onlyMethods(['getProjectSettings', 'getProjectId'])
             ->getMock();
+
+        // Project-scoped help text: entries are surfaced when their
+        // 'token-project' matches the current project id (see tokenEntry()).
+        $module->method('getProjectId')->willReturn('1');
+        $module->method('getProjectSettings')->willReturn([]);
+
+        return $module;
     }
 
     /** Invoke the private buildTokenRefHelpText() via reflection. */
@@ -53,8 +60,8 @@ class InstructionTokenRefHelpTest extends TestCase
     private function neutralNote(): string
     {
         return '<div class="text-muted" style="font-size:85%;">'
-             . 'No system token references are defined. '
-             . 'Ask your administrator to configure token references at the system level.'
+             . 'No system token references are yet defined for or used in this project. '
+             . '<br>Ask your administrator to configure token references at the system level.'
              . '</div>';
     }
 
@@ -66,6 +73,10 @@ class InstructionTokenRefHelpTest extends TestCase
             'token-url'           => $tokenUrl,
             'token-lookup-option' => 'specify',
             'token-specified'     => $secret,
+            // Mark the entry as defined for the current project so it is
+            // surfaced under buildTokenRefHelpText()'s project-scoping rule.
+            // Matches the stubbed getProjectId() ('1') in makeModule()/makeHookModule().
+            'token-project'       => '1',
         ];
     }
 
@@ -766,11 +777,16 @@ class InstructionTokenRefHelpTest extends TestCase
     {
         $module = $this->getMockBuilder(REDCapREST::class)
             ->disableOriginalConstructor()
-            ->onlyMethods(['getUrl', 'getSubSettings'])
+            ->onlyMethods(['getUrl', 'getSubSettings', 'getProjectSettings', 'getProjectId'])
             ->getMock();
 
         $module->method('getUrl')->willReturn($summaryUrl);
         $module->method('getSubSettings')->willReturn($systemTokens);
+
+        // Project-scoped help text: tokenEntry() marks entries 'token-project' => '1',
+        // so the current project id must match for them to be surfaced.
+        $module->method('getProjectId')->willReturn('1');
+        $module->method('getProjectSettings')->willReturn([]);
 
         return $module;
     }
