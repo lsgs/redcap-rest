@@ -158,16 +158,51 @@ class REDCapREST extends AbstractExternalModule {
 
             $pipedString = $string;
             try {
-                $pipedString = $this->pipe($string);
+                // Pipe each record-value placeholder individually and escape its
+                // INNER JSON content (", \, control chars) WITHOUT adding or
+                // removing surrounding quotes - quoting stays author-controlled by
+                // the template. Raw str_replace-style piping (as performed by
+                // Piping::replaceVariablesInLabel) cannot escape individual values,
+                // so a value containing " \ newline etc. would otherwise yield
+                // malformed or valid-but-wrong JSON. This mirrors the per-value
+                // urlencode() applied in the x-www-form-urlencoded branch above.
+                $workingString = $string;
+                $placeholderMatches = array();
+                \preg_match_all('/\[[^\]]+\]/', $workingString, $placeholderMatches);
+
+                $sentinels = array(); // sentinel => escaped value
+                $seen = array();      // placeholder => true (dedupe, first-seen order)
+                $idx = 0;
+                foreach ($placeholderMatches[0] as $placeholder) {
+                    if (array_key_exists($placeholder, $seen)) continue;
+                    $seen[$placeholder] = true;
+
+                    // Unique, collision-proof sentinel using control-char delimiters
+                    // that cannot appear in a JSON payload and are untouched by piping.
+                    $sentinel = "\x02RRJSON".$idx."\x03";
+                    $idx++;
+
+                    // Resolve this placeholder's value alone through the plain-text
+                    // piping seam, then escape its inner JSON content.
+                    $resolved = $this->pipePlainText($placeholder);
+                    $escaped = $this->escapeJsonInner($resolved);
+
+                    $workingString = str_replace($placeholder, $sentinel, $workingString);
+                    $sentinels[$sentinel] = $escaped;
+                }
+
+                // Reinsert each escaped value in place of its sentinel.
+                foreach ($sentinels as $sentinel => $escaped) {
+                    $workingString = str_replace($sentinel, $escaped, $workingString);
+                }
+
+                $pipedString = $workingString;
                 $pipedString = str_replace('"______"','""',$pipedString); // empty string value e.g. { "a": "______" } -> { "a": "" }
                 $pipedString = preg_replace('/:\s*______/',':null',$pipedString); // empty non-string value e.g. { "b": ______ } -> { "b":null }
 
-                // difficult to guarantee valid json :
-                // - instruction payload config can be invalid if piping numeric data e.g. {"x":[someint]}
-                // and/or
-                // - string after piping can be invalid due to unescaped " characters
-                //   e.g. { "a": "text "containing" quotes" } -> { "a": "text \"containing\" quotes" }
-                // ignoring for now...
+                // Whole-payload validation/normalization backstop. With per-value
+                // escaping this should rarely throw, but it stays as a final net
+                // and keeps the existing JsonException logging path unchanged.
                 $jsonDecodedPipedString = \json_decode($pipedString, null, 512, JSON_THROW_ON_ERROR);
                 $pipedString = \json_encode($jsonDecodedPipedString);
                 
@@ -176,18 +211,46 @@ class REDCapREST extends AbstractExternalModule {
             }
     
         } else {
-            $pipedString = \Piping::replaceVariablesInLabel(
-                $string, // $label='', 
-                $this->record, // $record=null, 
-                $this->event_id, // $event_id=null, 
-                $this->instance, // $instance=1, 
-                array(), // $record_data=array(),
-                true, // $replaceWithUnderlineIfMissing=true, 
-                null, // $project_id=null, 
-                false // $wrapValueInSpan=true
-            );
+            $pipedString = $this->pipePlainText($string);
         }
         return $pipedString;
+    }
+
+    /**
+     * pipePlainText
+     * Plain-text piping seam wrapping the raw REDCap substitution call. Isolated
+     * as its own method so per-value JSON piping and the plain-text branch share
+     * one code path, and so tests can mock piping without a REDCap install.
+     * @param string $string
+     * @return string
+     */
+    protected function pipePlainText($string) {
+        return \Piping::replaceVariablesInLabel(
+            $string, // $label='', 
+            $this->record, // $record=null, 
+            $this->event_id, // $event_id=null, 
+            $this->instance, // $instance=1, 
+            array(), // $record_data=array(),
+            true, // $replaceWithUnderlineIfMissing=true, 
+            null, // $project_id=null, 
+            false // $wrapValueInSpan=true
+        );
+    }
+
+    /**
+     * escapeJsonInner
+     * Escape a resolved value's INNER JSON content (", \, control chars such as
+     * newline/tab) WITHOUT adding surrounding quotes, so the result is safe to
+     * substitute into either a quoted or a bare placeholder position in a JSON
+     * template. Delegates escaping to PHP's JSON encoder (single source of truth)
+     * then strips the one leading and one trailing double-quote it adds.
+     * @param mixed $value
+     * @return string
+     */
+    protected function escapeJsonInner($value) {
+        $encoded = \json_encode((string)$value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($encoded === false) return (string)$value;
+        return \substr($encoded, 1, -1); // strip the outer quotes json_encode added
     }
 
     /**
